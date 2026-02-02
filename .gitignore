@@ -215,7 +215,7 @@ Thumbs.db
 .env.production.local
 
 # Backend specific
-backend/.env
+# backend/.env  # 注释掉以允许上传 .env 文件
 backend/venv/
 backend/__pycache__/
 backend/*.pyc
