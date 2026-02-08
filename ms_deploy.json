@@ -4,7 +4,6 @@
   "description": "AI 舆情谎言鉴定系统 - 基于多智能体的事实核查平台",
   "author": "coolife-code",
   "license": "MIT",
-  "type": "docker",
   "icon": "🔍",
   "tags": [
     "ai",
@@ -16,7 +15,8 @@
   ],
   "cover": "https://github.com/coolife-code/aletheia/raw/main/assets/cover.png",
   "visibility": "public",
-  "resources": {
+  "sdk_type": "docker",
+  "resource_configuration": {
     "cpu": 2,
     "memory": 4096,
     "gpu": null
