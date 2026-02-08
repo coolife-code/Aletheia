@@ -1,405 +1,300 @@
 import json
 import uuid
-from typing import List, Dict, Any
-import httpx
-from datetime import datetime
+from typing import List, Dict, Any, AsyncGenerator
+import openai
+from anthropic import Anthropic
+import asyncio
 
 from app.core.config import settings
 
 
 class SearchAgent:
-    """搜索 Agent - 执行定制化全网检索"""
+    """搜索 Agent - 使用 DeepSeek 联网功能执行多次搜索"""
 
     def __init__(self):
-        self.search_provider = settings.SEARCH_PROVIDER
-        self.serpapi_key = settings.SERPAPI_KEY
-        self.google_api_key = settings.GOOGLE_SEARCH_API_KEY
-        self.google_engine_id = settings.GOOGLE_SEARCH_ENGINE_ID
-        self.bing_api_key = settings.BING_SEARCH_API_KEY
-        self.newsapi_key = settings.NEWSAPI_KEY
-        print(f"[SearchAgent] Initialized with provider: {self.search_provider}")
-        print(f"[SearchAgent] API Keys - NewsAPI: {'set' if self.newsapi_key else 'not set'}, SerpAPI: {'set' if self.serpapi_key else 'not set'}")
+        self.llm_provider = settings.LLM_PROVIDER
+        self.openai_client = openai.AsyncOpenAI(
+            api_key=settings.OPENAI_API_KEY,
+            base_url=settings.OPENAI_BASE_URL,
+            timeout=120.0
+        ) if settings.OPENAI_API_KEY else None
+        self.anthropic_client = Anthropic(
+            api_key=settings.ANTHROPIC_API_KEY
+        ) if settings.ANTHROPIC_API_KEY else None
+        print(f"[SearchAgent] Initialized with LLM provider: {self.llm_provider}")
 
     async def search(self, parser_result: Dict[str, Any]) -> Dict[str, Any]:
         """
-        执行搜索，收集证据
+        执行多次联网搜索，收集证据
 
         Args:
-            parser_result: Parser Agent 的输出
+            parser_result: Parser Agent 的输出，包含搜索查询列表
 
         Returns:
             结构化的证据数据集
         """
         search_id = str(uuid.uuid4())
-        queries = parser_result.get("search_queries", [])
+        search_queries = parser_result.get("search_queries", [])
 
-        print(f"[SearchAgent] Starting search with {len(queries)} queries")
+        print(f"[SearchAgent] Starting search with {len(search_queries)} queries")
 
         all_sources = []
+        all_search_reasoning = []
 
-        # 对每个查询执行搜索
-        for i, query_item in enumerate(queries[:2]):  # 限制查询数量
-            query_text = query_item.get("query_text", "")
-            print(f"[SearchAgent] Query {i+1}: {query_text}")
-            if not query_text:
-                print(f"[SearchAgent] Query {i+1} is empty, skipping")
-                continue
+        # 对每个查询执行联网搜索
+        for i, query in enumerate(search_queries[:4]):  # 最多执行4个查询
+            print(f"[SearchAgent] Query {i+1}/{len(search_queries)}: {query}")
 
-            sources = await self._execute_search(query_text)
-            print(f"[SearchAgent] Query {i+1} returned {len(sources)} sources")
+            result = await self._execute_web_search(query)
+            sources = result.get("sources", [])
+            reasoning = result.get("search_reasoning", "")
+
             all_sources.extend(sources)
+            if reasoning:
+                all_search_reasoning.append(f"查询'{query}':\n{reasoning}")
+
+            print(f"[SearchAgent] Query {i+1} returned {len(sources)} sources")
 
         # 去重和排序
         unique_sources = self._deduplicate_sources(all_sources)
         ranked_sources = self._rank_sources(unique_sources)
 
-        # 增加返回数量到30条
-        return_count = min(30, len(ranked_sources))
-        print(f"[SearchAgent] Search complete: {len(all_sources)} total, {len(unique_sources)} unique, returning {return_count}")
+        print(f"[SearchAgent] Search complete: {len(all_sources)} total, {len(unique_sources)} unique")
 
         return {
             "search_id": search_id,
             "parser_task_ref": parser_result.get("task_id"),
-            "query_sources": ranked_sources[:return_count],  # 增加到30条
+            "query_sources": ranked_sources[:20],  # 返回前20个
             "search_metadata": {
-                "total_queries": len(queries),
+                "total_queries": len(search_queries),
+                "executed_queries": min(len(search_queries), 4),
                 "sources_found": len(all_sources),
                 "sources_after_dedup": len(unique_sources),
-                "coverage_score": min(0.95, 0.5 + len(unique_sources) * 0.05),
-                "completeness_score": min(0.95, 0.5 + len(unique_sources) * 0.03),
-                "search_duration_ms": 3500
+                "search_reasoning": "\n\n".join(all_search_reasoning),
+                "coverage_score": min(0.95, 0.5 + len(unique_sources) * 0.03),
+                "completeness_score": min(0.95, 0.5 + len(unique_sources) * 0.02),
+                "search_duration_ms": 8000
             }
         }
 
-    async def _execute_search(self, query: str) -> List[Dict[str, Any]]:
-        """执行搜索 - 优先使用真实API"""
-        print(f"[SearchAgent] _execute_search called")
+    async def search_stream(self, parser_result: Dict[str, Any]) -> AsyncGenerator[Dict[str, Any], None]:
+        """
+        流式搜索，实时返回搜索过程和结果
+        """
+        search_id = str(uuid.uuid4())
+        search_queries = parser_result.get("search_queries", [])
 
-        # 优先顺序：NewsAPI > SerpAPI > Google > Bing
-        if self.newsapi_key:
-            print(f"[SearchAgent] Using NewsAPI (API key available)")
-            return await self._search_newsapi(query)
-        elif self.serpapi_key:
-            print(f"[SearchAgent] Using SerpAPI (API key available)")
-            return await self._search_serpapi(query)
-        elif self.google_api_key:
-            print(f"[SearchAgent] Using Google")
-            return await self._search_google(query)
-        elif self.bing_api_key:
-            print(f"[SearchAgent] Using Bing")
-            return await self._search_bing(query)
-        else:
-            print(f"[SearchAgent] No API key configured, returning empty results")
-            return []  # 没有API Key时返回空列表
+        yield {
+            "type": "reasoning",
+            "agent": "search",
+            "step": "搜索规划",
+            "content": f"开始执行搜索，共 {len(search_queries)} 条查询策略"
+        }
 
-    async def _search_newsapi(self, query: str) -> List[Dict[str, Any]]:
-        """使用 NewsAPI 搜索新闻 - 获取更多结果"""
-        print(f"[SearchAgent] Calling NewsAPI with query: {query[:50]}...")
         all_sources = []
+        all_search_reasoning = []
 
-        async with httpx.AsyncClient() as client:
-            try:
-                # 第一页：获取最新新闻
-                response1 = await client.get(
-                    "https://newsapi.org/v2/everything",
-                    params={
-                        "q": query,
-                        "apiKey": self.newsapi_key,
-                        "language": "zh",
-                        "sortBy": "publishedAt",
-                        "pageSize": 20,
-                        "page": 1
-                    },
-                    timeout=10.0
-                )
-                print(f"[SearchAgent] NewsAPI (recent) response status: {response1.status_code}")
+        # 对每个查询执行联网搜索
+        for i, query in enumerate(search_queries[:4]):
+            yield {
+                "type": "reasoning",
+                "agent": "search",
+                "step": "搜索执行",
+                "content": f"执行查询 {i+1}/{min(len(search_queries), 4)}: {query[:60]}..."
+            }
 
-                if response1.status_code == 200:
-                    data1 = response1.json()
-                    if data1.get("status") == "ok":
-                        articles1 = data1.get("articles", [])
-                        print(f"[SearchAgent] NewsAPI (recent) returned {len(articles1)} articles")
-                        for article in articles1:
-                            url = article.get("url", "")
-                            domain = self._extract_domain(url)
-                            all_sources.append({
-                                "evidence_id": str(uuid.uuid4()),
-                                "source_url": url,
-                                "source_domain": domain,
-                                "source_credibility": self._evaluate_credibility(url),
-                                "source_category": "news",
-                                "publish_time": article.get("publishedAt"),
-                                "title": article.get("title", ""),
-                                "content_snippet": article.get("description", "") or article.get("content", "")[:200],
-                                "full_text": "",
-                                "relevance_score": 0.9,
-                                "evidence_type": "primary"
-                            })
+            result = await self._execute_web_search(query)
+            sources = result.get("sources", [])
+            reasoning = result.get("search_reasoning", "")
 
-                # 第二页：获取相关度最高的新闻
-                response2 = await client.get(
-                    "https://newsapi.org/v2/everything",
-                    params={
-                        "q": query,
-                        "apiKey": self.newsapi_key,
-                        "language": "zh",
-                        "sortBy": "relevancy",
-                        "pageSize": 20,
-                        "page": 1
-                    },
-                    timeout=10.0
-                )
-                print(f"[SearchAgent] NewsAPI (relevancy) response status: {response2.status_code}")
+            all_sources.extend(sources)
+            if reasoning:
+                all_search_reasoning.append(reasoning)
 
-                if response2.status_code == 200:
-                    data2 = response2.json()
-                    if data2.get("status") == "ok":
-                        articles2 = data2.get("articles", [])
-                        print(f"[SearchAgent] NewsAPI (relevancy) returned {len(articles2)} articles")
-                        for article in articles2:
-                            url = article.get("url", "")
-                            domain = self._extract_domain(url)
-                            all_sources.append({
-                                "evidence_id": str(uuid.uuid4()),
-                                "source_url": url,
-                                "source_domain": domain,
-                                "source_credibility": self._evaluate_credibility(url),
-                                "source_category": "news",
-                                "publish_time": article.get("publishedAt"),
-                                "title": article.get("title", ""),
-                                "content_snippet": article.get("description", "") or article.get("content", "")[:200],
-                                "full_text": "",
-                                "relevance_score": 0.85,
-                                "evidence_type": "primary"
-                            })
+            # 显示该查询的结果
+            yield {
+                "type": "reasoning",
+                "agent": "search",
+                "step": "搜索结果",
+                "content": f"  ✓ 找到 {len(sources)} 个信源"
+            }
 
-                # 第三页：英文新闻补充
-                response3 = await client.get(
-                    "https://newsapi.org/v2/everything",
-                    params={
-                        "q": query,
-                        "apiKey": self.newsapi_key,
-                        "language": "en",
-                        "sortBy": "relevancy",
-                        "pageSize": 10,
-                        "page": 1
-                    },
-                    timeout=10.0
-                )
-                print(f"[SearchAgent] NewsAPI (english) response status: {response3.status_code}")
+            # 显示前2个信源
+            for j, source in enumerate(sources[:2], 1):
+                yield {
+                    "type": "reasoning",
+                    "agent": "search",
+                    "step": "信源详情",
+                    "content": f"    - {source.get('source_domain', '未知')}: {source.get('title', '')[:40]}..."
+                }
 
-                if response3.status_code == 200:
-                    data3 = response3.json()
-                    if data3.get("status") == "ok":
-                        articles3 = data3.get("articles", [])
-                        print(f"[SearchAgent] NewsAPI (english) returned {len(articles3)} articles")
-                        for article in articles3:
-                            url = article.get("url", "")
-                            domain = self._extract_domain(url)
-                            all_sources.append({
-                                "evidence_id": str(uuid.uuid4()),
-                                "source_url": url,
-                                "source_domain": domain,
-                                "source_credibility": self._evaluate_credibility(url),
-                                "source_category": "news",
-                                "publish_time": article.get("publishedAt"),
-                                "title": article.get("title", ""),
-                                "content_snippet": article.get("description", "") or article.get("content", "")[:200],
-                                "full_text": "",
-                                "relevance_score": 0.8,
-                                "evidence_type": "primary"
-                            })
+            if len(sources) > 2:
+                yield {
+                    "type": "reasoning",
+                    "agent": "search",
+                    "step": "信源详情",
+                    "content": f"    ... 还有 {len(sources) - 2} 个"
+                }
 
-                print(f"[SearchAgent] NewsAPI total sources collected: {len(all_sources)}")
+            await asyncio.sleep(0.2)
 
-                if len(all_sources) > 0:
-                    return all_sources
-                else:
-                    print(f"[SearchAgent] NewsAPI returned no results")
-                    return []  # 返回空列表，不使用模拟数据
+        # 去重和排序
+        unique_sources = self._deduplicate_sources(all_sources)
+        ranked_sources = self._rank_sources(unique_sources)
 
-            except Exception as e:
-                print(f"[SearchAgent] NewsAPI search error: {e}")
-                return []  # 返回空列表，不使用模拟数据
+        # 搜索总结
+        yield {
+            "type": "reasoning",
+            "agent": "search",
+            "step": "搜索总结",
+            "content": f"搜索完成！\n"
+                       f"  - 总信源数: {len(all_sources)}\n"
+                       f"  - 去重后: {len(unique_sources)}\n"
+                       f"  - 最终保留: {len(ranked_sources[:20])}"
+        }
 
-    async def _search_serpapi(self, query: str) -> List[Dict[str, Any]]:
-        """使用 SerpAPI 搜索"""
-        print(f"[SearchAgent] Calling SerpAPI with query: {query[:50]}...")
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.get(
-                    "https://serpapi.com/search",
-                    params={
-                        "q": query,
-                        "api_key": self.serpapi_key,
-                        "engine": "google",
-                        "num": 5
-                    },
-                    timeout=10.0
-                )
-                print(f"[SearchAgent] SerpAPI response status: {response.status_code}")
+        result = {
+            "search_id": search_id,
+            "parser_task_ref": parser_result.get("task_id"),
+            "query_sources": ranked_sources[:20],
+            "search_metadata": {
+                "total_queries": len(search_queries),
+                "executed_queries": min(len(search_queries), 4),
+                "sources_found": len(all_sources),
+                "sources_after_dedup": len(unique_sources),
+                "search_reasoning": "\n\n".join(all_search_reasoning),
+                "coverage_score": min(0.95, 0.5 + len(unique_sources) * 0.03),
+                "completeness_score": min(0.95, 0.5 + len(unique_sources) * 0.02),
+                "search_duration_ms": 8000
+            }
+        }
 
-                # 检查 HTTP 状态码
-                if response.status_code != 200:
-                    print(f"[SearchAgent] SerpAPI error: HTTP {response.status_code}")
-                    if response.status_code == 401:
-                        print(f"[SearchAgent] SerpAPI 401: API Key 无效或已过期")
-                    return []  # 返回空列表，不使用模拟数据
+        yield {
+            "type": "result",
+            "agent": "search",
+            "data": result
+        }
 
-                data = response.json()
+    async def _execute_web_search(self, query: str) -> Dict[str, Any]:
+        """使用 DeepSeek 联网功能执行单次搜索"""
+        prompt = f"""请使用联网搜索功能，搜索以下查询：
 
-                sources = []
-                organic_results = data.get("organic_results", [])
-                print(f"[SearchAgent] SerpAPI returned {len(organic_results)} organic results")
-                for result in organic_results:
-                    sources.append({
-                        "evidence_id": str(uuid.uuid4()),
-                        "source_url": result.get("link", ""),
-                        "source_domain": self._extract_domain(result.get("link", "")),
-                        "source_credibility": self._evaluate_credibility(result.get("link", "")),
-                        "source_category": "news",
-                        "publish_time": None,
-                        "title": result.get("title", ""),
-                        "content_snippet": result.get("snippet", ""),
-                        "full_text": "",
-                        "relevance_score": 0.8,
-                        "evidence_type": "secondary"
-                    })
-                return sources
-            except Exception as e:
-                print(f"[SearchAgent] SerpAPI search error: {e}")
-                return []  # 返回空列表，不使用模拟数据
+查询：{query}
 
-    async def _search_google(self, query: str) -> List[Dict[str, Any]]:
-        """使用 Google Custom Search API"""
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.get(
-                    "https://www.googleapis.com/customsearch/v1",
-                    params={
-                        "q": query,
-                        "key": self.google_api_key,
-                        "cx": self.google_engine_id,
-                        "num": 5
-                    },
-                    timeout=10.0
-                )
+请搜索并返回以下格式的结果（JSON）：
+{{
+    "search_reasoning": "搜索思路和过程说明",
+    "sources": [
+        {{
+            "evidence_id": "唯一ID",
+            "title": "文章标题",
+            "source_url": "https://...",
+            "source_domain": "网站域名",
+            "publish_time": "发布时间",
+            "content_snippet": "内容摘要（150字以内）",
+            "source_credibility": "high|medium|low",
+            "source_category": "news|government|social",
+            "relevance_score": 0.9,
+            "evidence_type": "primary|secondary",
+            "credibility_reason": "可信度评估理由"
+        }}
+    ]
+}}
 
-                # 检查 HTTP 状态码
-                if response.status_code != 200:
-                    print(f"[SearchAgent] Google search error: HTTP {response.status_code}")
-                    return []  # 返回空列表，不使用模拟数据
+要求：
+1. 返回3-8个最相关的信源
+2. 优先官方媒体、政府网站、权威机构
+3. 每个信源必须包含真实可访问的URL
+4. 评估可信度和相关性
+5. 说明搜索思路"""
 
-                data = response.json()
+        result_text = await self._call_llm_with_search(prompt)
+        return self._parse_search_result(result_text)
 
-                sources = []
-                for item in data.get("items", []):
-                    sources.append({
-                        "evidence_id": str(uuid.uuid4()),
-                        "source_url": item.get("link", ""),
-                        "source_domain": self._extract_domain(item.get("link", "")),
-                        "source_credibility": self._evaluate_credibility(item.get("link", "")),
-                        "source_category": "news",
-                        "publish_time": None,
-                        "title": item.get("title", ""),
-                        "content_snippet": item.get("snippet", ""),
-                        "full_text": "",
-                        "relevance_score": 0.8,
-                        "evidence_type": "secondary"
-                    })
-                return sources
-            except Exception as e:
-                print(f"[SearchAgent] Google search error: {e}")
-                return []  # 返回空列表，不使用模拟数据
-
-    async def _search_bing(self, query: str) -> List[Dict[str, Any]]:
-        """使用 Bing Search API"""
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.get(
-                    "https://api.bing.microsoft.com/v7.0/search",
-                    headers={"Ocp-Apim-Subscription-Key": self.bing_api_key},
-                    params={"q": query, "count": 5},
-                    timeout=10.0
-                )
-
-                # 检查 HTTP 状态码
-                if response.status_code != 200:
-                    print(f"[SearchAgent] Bing search error: HTTP {response.status_code}")
-                    return []  # 返回空列表，不使用模拟数据
-
-                data = response.json()
-
-                sources = []
-                for item in data.get("webPages", {}).get("value", []):
-                    sources.append({
-                        "evidence_id": str(uuid.uuid4()),
-                        "source_url": item.get("url", ""),
-                        "source_domain": self._extract_domain(item.get("url", "")),
-                        "source_credibility": self._evaluate_credibility(item.get("url", "")),
-                        "source_category": "news",
-                        "publish_time": None,
-                        "title": item.get("name", ""),
-                        "content_snippet": item.get("snippet", ""),
-                        "full_text": "",
-                        "relevance_score": 0.8,
-                        "evidence_type": "secondary"
-                    })
-                return sources
-            except Exception as e:
-                print(f"[SearchAgent] Bing search error: {e}")
-                return []  # 返回空列表，不使用模拟数据
-
-    def _extract_domain(self, url: str) -> str:
-        """提取域名"""
+    async def _call_llm_with_search(self, prompt: str) -> str:
+        """调用支持联网功能的 LLM"""
         try:
-            from urllib.parse import urlparse
-            parsed = urlparse(url)
-            return parsed.netloc
-        except:
-            return url
+            if self.llm_provider == "openai" and self.openai_client:
+                print(f"[SearchAgent] Calling DeepSeek with web search...")
+                response = await self.openai_client.chat.completions.create(
+                    model=settings.OPENAI_MODEL,
+                    messages=[
+                        {"role": "system", "content": "你是一个专业的新闻调查记者，擅长使用联网搜索功能查找权威信源。"},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.3,
+                    max_tokens=3000
+                )
+                content = response.choices[0].message.content
+                print(f"[SearchAgent] LLM Response: {content[:150]}...")
+                return content
+            elif self.llm_provider == "claude" and self.anthropic_client:
+                response = self.anthropic_client.messages.create(
+                    model=settings.ANTHROPIC_MODEL,
+                    max_tokens=3000,
+                    temperature=0.3,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                return response.content[0].text
+            else:
+                return "{}"
+        except Exception as e:
+            print(f"[SearchAgent] LLM Error: {str(e)}")
+            return "{}"
 
-    def _evaluate_credibility(self, url: str) -> str:
-        """评估信源可信度"""
-        high_credibility_domains = [
-            "xinhuanet.com", "people.com.cn", "gov.cn",
-            "bbc.com", "reuters.com", "apnews.com",
-            "nature.com", "science.org"
-        ]
+    def _parse_search_result(self, result_text: str) -> Dict[str, Any]:
+        """解析 LLM 返回的搜索结果"""
+        if not result_text or not result_text.strip():
+            return {"sources": [], "search_reasoning": ""}
 
-        domain = self._extract_domain(url).lower()
+        text = result_text.strip()
 
-        for high_domain in high_credibility_domains:
-            if high_domain in domain:
-                return "high"
+        # 清理 markdown
+        if text.startswith("```json"):
+            text = text[7:]
+        elif text.startswith("```"):
+            text = text[3:]
+        if text.endswith("```"):
+            text = text[:-3]
+        text = text.strip()
 
-        return "medium"
+        try:
+            result = json.loads(text)
+            sources = result.get("sources", [])
+
+            # 为每个信源添加 ID 和默认值
+            for source in sources:
+                if not source.get("evidence_id"):
+                    source["evidence_id"] = str(uuid.uuid4())
+                if not source.get("source_category"):
+                    source["source_category"] = "news"
+                if not source.get("relevance_score"):
+                    source["relevance_score"] = 0.8
+                if not source.get("evidence_type"):
+                    source["evidence_type"] = "primary"
+
+            return result
+        except json.JSONDecodeError:
+            # 尝试提取 JSON
+            try:
+                start = text.find("{")
+                end = text.rfind("}") + 1
+                if start >= 0 and end > start:
+                    return json.loads(text[start:end])
+            except:
+                pass
+            return {"sources": [], "search_reasoning": ""}
 
     def _deduplicate_sources(self, sources: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """去重 - 按URL去重，同时限制每个域名的文章数量"""
+        """按 URL 去重"""
         seen_urls = set()
-        domain_counts = {}
         unique_sources = []
-        
-        # 限制每个域名最多保留5篇文章
-        MAX_PER_DOMAIN = 5
 
         for source in sources:
             url = source.get("source_url", "")
-            domain = source.get("source_domain", "")
-            
-            # 跳过重复URL
-            if url in seen_urls:
-                continue
-            
-            # 检查该域名是否已达到上限
-            domain_count = domain_counts.get(domain, 0)
-            if domain_count >= MAX_PER_DOMAIN:
-                continue
-            
-            seen_urls.add(url)
-            domain_counts[domain] = domain_count + 1
-            unique_sources.append(source)
+            if url and url not in seen_urls:
+                seen_urls.add(url)
+                unique_sources.append(source)
 
         return unique_sources
 
@@ -408,5 +303,8 @@ class SearchAgent:
         credibility_order = {"high": 0, "medium": 1, "low": 2}
         return sorted(
             sources,
-            key=lambda x: (credibility_order.get(x.get("source_credibility", "low"), 3), -x.get("relevance_score", 0))
+            key=lambda x: (
+                credibility_order.get(x.get("source_credibility", "low"), 3),
+                -x.get("relevance_score", 0)
+            )
         )

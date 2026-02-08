@@ -3,7 +3,7 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ExternalLink, Newspaper } from 'lucide-react';
+import { ExternalLink, Newspaper, Info } from 'lucide-react';
 import { Evidence, SourceCredibility } from '@/types';
 
 interface EvidenceListProps {
@@ -31,6 +31,14 @@ export function EvidenceList({ evidenceList }: EvidenceListProps) {
         </CardTitle>
       </CardHeader>
       <CardContent>
+        {/* 提示信息 */}
+        <div className="mb-4 p-3 bg-blue-50 border border-blue-100 rounded-lg flex items-start gap-2">
+          <Info className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
+          <p className="text-xs text-blue-700">
+            点击下方"查看原文"链接将在新标签页打开信源页面，查看后可返回本页继续浏览鉴定结果
+          </p>
+        </div>
+
         <div className="space-y-4">
           {evidenceList.map((evidence, index) => (
             <div 
@@ -85,12 +93,17 @@ export function EvidenceList({ evidenceList }: EvidenceListProps) {
                       </span>
                     </div>
                     
-                    {/* 查看原文链接 */}
+                    {/* 查看原文链接 - 在新标签页打开 */}
                     <a
                       href={evidence.source_url}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 transition-colors"
+                      onClick={(e) => {
+                        // 确保在新标签页打开
+                        e.preventDefault();
+                        window.open(evidence.source_url, '_blank', 'noopener,noreferrer');
+                      }}
                     >
                       查看原文
                       <ExternalLink className="w-3 h-3" />

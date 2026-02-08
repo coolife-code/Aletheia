@@ -23,14 +23,24 @@ async def verify_content(request: VerifyRequest):
     
     流程：
     1. Parser Agent 解析内容
-    2. Search Agent 搜索证据
+    2. Search Agent 使用 DeepSeek 联网搜索证据
     3. Verdict Agent 生成鉴定结论
     """
     try:
         # Step 1: 解析内容
         parser_result = await parser_agent.parse(request.content)
         
-        # Step 2: 搜索证据
+        if parser_result.get("needs_clarification"):
+            return VerifyResponse(
+                verdict_id="",
+                conclusion="unverifiable",
+                confidence_score=0.0,
+                summary=parser_result.get("clarification_prompt", "请提供更多具体信息"),
+                evidence_list=[],
+                reasoning_chain=[]
+            )
+        
+        # Step 2: 搜索证据（使用 DeepSeek 联网功能）
         search_result = await search_agent.search(parser_result)
         
         # Step 3: 生成鉴定结论
@@ -74,7 +84,7 @@ async def verify_content_stream(request: VerifyRequest):
     
     返回格式：
     {
-        "type": "reasoning" | "result",
+        "type": "reasoning" | "result" | "complete" | "error",
         "agent": "parser" | "search" | "verdict",
         "step": "步骤名称",
         "content": "推理内容",
@@ -84,62 +94,45 @@ async def verify_content_stream(request: VerifyRequest):
     async def event_generator():
         try:
             # ==================== Step 1: Parser Agent ====================
-            yield f"data: {json.dumps({'type': 'start', 'agent': 'parser', 'step': '开始解析', 'content': '🔄 Parser Agent 开始解析内容...'}, ensure_ascii=False)}\n\n"
-            await asyncio.sleep(0.3)
-            
             parser_result_data = None
             async for parser_event in parser_agent.parse_stream(request.content):
                 yield f"data: {json.dumps(parser_event, ensure_ascii=False)}\n\n"
                 if parser_event.get("type") == "result":
                     parser_result_data = parser_event.get("data")
-                await asyncio.sleep(0.1)  # 小延迟让前端有时间渲染
+                await asyncio.sleep(0.05)
             
             # 检查是否需要澄清
             if parser_result_data and parser_result_data.get("needs_clarification"):
-                yield f"data: {json.dumps({'type': 'complete', 'needs_clarification': True, 'clarification_prompt': parser_result_data.get('clarification_prompt')}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({
+                    'type': 'complete',
+                    'needs_clarification': True,
+                    'clarification_prompt': parser_result_data.get('clarification_prompt')
+                }, ensure_ascii=False)}\n\n"
                 return
             
             if not parser_result_data:
                 yield f"data: {json.dumps({'type': 'error', 'message': '解析失败'}, ensure_ascii=False)}\n\n"
                 return
             
-            # ==================== Step 2: Search Agent ====================
-            yield f"data: {json.dumps({'type': 'start', 'agent': 'search', 'step': '开始搜索', 'content': '🔍 Search Agent 开始搜索证据...'}, ensure_ascii=False)}\n\n"
-            await asyncio.sleep(0.3)
+            # ==================== Step 2: Search Agent (DeepSeek 联网) ====================
+            search_result_data = None
+            async for search_event in search_agent.search_stream(parser_result_data):
+                yield f"data: {json.dumps(search_event, ensure_ascii=False)}\n\n"
+                if search_event.get("type") == "result":
+                    search_result_data = search_event.get("data")
+                await asyncio.sleep(0.05)
             
-            # 搜索过程状态更新
-            search_queries = parser_result_data.get("search_queries", [])
-            yield f"data: {json.dumps({'type': 'reasoning', 'agent': 'search', 'step': '搜索查询', 'content': f'准备执行 {len(search_queries)} 个搜索查询...'}, ensure_ascii=False)}\n\n"
-            await asyncio.sleep(0.5)
-            
-            # 执行搜索
-            search_result = await search_agent.search(parser_result_data)
-            
-            sources = search_result.get("query_sources", [])
-            yield f"data: {json.dumps({'type': 'reasoning', 'agent': 'search', 'step': '搜索结果', 'content': f'✓ 找到 {len(sources)} 个相关信源'}, ensure_ascii=False)}\n\n"
-            
-            # 显示找到的信源
-            for i, source in enumerate(sources[:3], 1):
-                domain = source.get("source_domain", "未知")
-                title = source.get("title", "")[:40]
-                yield f"data: {json.dumps({'type': 'reasoning', 'agent': 'search', 'step': '信源详情', 'content': f'  {i}. {domain} - {title}...'}, ensure_ascii=False)}\n\n"
-                await asyncio.sleep(0.1)
-            
-            if len(sources) > 3:
-                yield f"data: {json.dumps({'type': 'reasoning', 'agent': 'search', 'step': '信源详情', 'content': f'  ... 还有 {len(sources) - 3} 个信源'}, ensure_ascii=False)}\n\n"
-            
-            await asyncio.sleep(0.3)
+            if not search_result_data:
+                yield f"data: {json.dumps({'type': 'error', 'message': '搜索失败'}, ensure_ascii=False)}\n\n"
+                return
             
             # ==================== Step 3: Verdict Agent ====================
-            yield f"data: {json.dumps({'type': 'start', 'agent': 'verdict', 'step': '开始鉴定', 'content': '🧠 Verdict Agent 开始分析鉴定...'}, ensure_ascii=False)}\n\n"
-            await asyncio.sleep(0.3)
-            
             verdict_result_data = None
-            async for verdict_event in verdict_agent.verdict_stream(search_result, request.content):
+            async for verdict_event in verdict_agent.verdict_stream(search_result_data, request.content):
                 yield f"data: {json.dumps(verdict_event, ensure_ascii=False)}\n\n"
                 if verdict_event.get("type") == "result":
                     verdict_result_data = verdict_event.get("data")
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.05)
             
             # ==================== 最终结果 ====================
             if verdict_result_data:
@@ -158,7 +151,7 @@ async def verify_content_stream(request: VerifyRequest):
                         "evidence_type": s.get("evidence_type"),
                         "supports": True
                     }
-                    for s in search_result.get("query_sources", [])
+                    for s in search_result_data.get("query_sources", [])
                 ]
                 
                 final_result = {
@@ -184,7 +177,7 @@ async def verify_content_stream(request: VerifyRequest):
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
-            "X-Accel-Buffering": "no"  # 禁用 Nginx 缓冲
+            "X-Accel-Buffering": "no"
         }
     )
 
