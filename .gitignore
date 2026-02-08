@@ -215,12 +215,18 @@ Thumbs.db
 .env.production.local
 
 # Backend specific
-# backend/.env  # 注释掉以允许上传 .env 文件
+backend/.env  # 生产环境配置文件，包含敏感信息，不上传
 backend/venv/
 backend/__pycache__/
 backend/*.pyc
 backend/.pytest_cache/
 backend/.mypy_cache/
+
+# Deployment files - 保留部署配置
+!Dockerfile
+!modelscope.yaml
+!start.sh
+!DEPLOY.md
 
 # Frontend specific
 frontend/node_modules/
