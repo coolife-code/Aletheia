@@ -225,6 +225,7 @@ backend/.mypy_cache/
 # Deployment files - 保留部署配置
 !Dockerfile
 !modelscope.yaml
+!ms_deploy.json
 !start.sh
 !DEPLOY.md
 

@@ -1,0 +1,91 @@
+{
+  "name": "aletheia",
+  "version": "1.0.0",
+  "description": "AI 舆情谎言鉴定系统 - 基于多智能体的事实核查平台",
+  "author": "coolife-code",
+  "license": "MIT",
+  "type": "docker",
+  "icon": "🔍",
+  "tags": [
+    "ai",
+    "fact-checking",
+    "deepseek",
+    "multi-agent",
+    "舆情分析",
+    "事实核查"
+  ],
+  "cover": "https://github.com/coolife-code/aletheia/raw/main/assets/cover.png",
+  "visibility": "public",
+  "resources": {
+    "cpu": 2,
+    "memory": 4096,
+    "gpu": null
+  },
+  "ports": [
+    {
+      "port": 7860,
+      "protocol": "http",
+      "description": "Web 应用访问端口"
+    }
+  ],
+  "health_check": {
+    "path": "/",
+    "port": 7860,
+    "initial_delay": 30,
+    "interval": 10,
+    "timeout": 5,
+    "retries": 3
+  },
+  "env": [
+    {
+      "name": "OPENAI_API_KEY",
+      "description": "阿里百炼 API Key (用于 DeepSeek 模型)",
+      "required": true,
+      "secret": true
+    },
+    {
+      "name": "OPENAI_BASE_URL",
+      "description": "OpenAI 兼容 API 基础 URL",
+      "default": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "required": false,
+      "secret": false
+    },
+    {
+      "name": "OPENAI_MODEL",
+      "description": "使用的模型名称",
+      "default": "deepseek-v3.2",
+      "required": false,
+      "secret": false
+    },
+    {
+      "name": "SERPAPI_KEY",
+      "description": "SerpAPI Key (可选，用于增强搜索)",
+      "required": false,
+      "secret": true
+    },
+    {
+      "name": "NEWSAPI_KEY",
+      "description": "NewsAPI Key (可选，用于新闻搜索)",
+      "required": false,
+      "secret": true
+    },
+    {
+      "name": "ENVIRONMENT",
+      "description": "运行环境",
+      "default": "production",
+      "required": false,
+      "secret": false
+    },
+    {
+      "name": "DEBUG",
+      "description": "调试模式",
+      "default": "false",
+      "required": false,
+      "secret": false
+    }
+  ],
+  "docker": {
+    "context": ".",
+    "dockerfile": "Dockerfile"
+  }
+}
