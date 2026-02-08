@@ -125,29 +125,52 @@ export default function ReasoningPanel({ events, isLoading }: ReasoningPanelProp
 
               {/* 推理内容 */}
               {isExpanded && (
-                <div className="p-3 space-y-2 border-t bg-gray-50">
+                <div className="p-3 space-y-3 border-t bg-gray-50 max-h-[500px] overflow-y-auto">
                   {reasoningEvents.map((event, index) => (
                     <div 
                       key={index}
-                      className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed"
+                      className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed p-3 bg-white rounded-lg border border-gray-100 shadow-sm"
                     >
                       {event.step && (
-                        <span className="inline-block px-2 py-0.5 bg-gray-200 rounded text-xs font-medium mr-2">
-                          {event.step}
-                        </span>
+                        <div className="flex items-center gap-2 mb-2">
+                          <span 
+                            className="inline-block px-2 py-0.5 rounded text-xs font-medium"
+                            style={{ backgroundColor: `${config.color}20`, color: config.color }}
+                          >
+                            {event.step}
+                          </span>
+                          <span className="text-xs text-gray-400">步骤 {index + 1}</span>
+                        </div>
                       )}
-                      {event.content}
+                      <div className="text-gray-700 leading-relaxed">
+                        {event.content}
+                      </div>
                     </div>
                   ))}
                 </div>
               )}
 
-              {/* 折叠时只显示最新一条 */}
+              {/* 折叠时显示最近3条推理 */}
               {!isExpanded && reasoningEvents.length > 0 && (
-                <div className="px-3 py-2 border-t bg-gray-50">
-                  <div className="text-sm text-gray-600 truncate">
-                    {reasoningEvents[reasoningEvents.length - 1].content}
-                  </div>
+                <div className="px-3 py-2 border-t bg-gray-50 space-y-2">
+                  {reasoningEvents.slice(-3).map((event, idx) => (
+                    <div key={idx} className="text-sm text-gray-600 line-clamp-2">
+                      {event.step && (
+                        <span 
+                          className="inline-block px-1.5 py-0.5 rounded text-xs font-medium mr-2"
+                          style={{ backgroundColor: `${config.color}15`, color: config.color }}
+                        >
+                          {event.step}
+                        </span>
+                      )}
+                      <span className="truncate">{event.content}</span>
+                    </div>
+                  ))}
+                  {reasoningEvents.length > 3 && (
+                    <div className="text-xs text-gray-400 text-center">
+                      还有 {reasoningEvents.length - 3} 个步骤...
+                    </div>
+                  )}
                 </div>
               )}
             </div>

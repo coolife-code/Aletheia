@@ -74,59 +74,83 @@ class ParserAgent:
             }
             return
 
-        # 问题分析
+        # 问题分析 - 详细推理过程
         yield {
             "type": "reasoning",
             "agent": "parser",
             "step": "问题分析",
-            "content": "正在分析查询的核心实体、意图和信息类型..."
+            "content": "🧠 开始分析问题...\n"
+                       "   1. 提取核心实体：识别人物、组织、事件、地点等关键要素\n"
+                       "   2. 理解查询意图：判断用户想要验证什么信息\n"
+                       "   3. 确定信息类型：事实验证 / 背景信息 / 数据 / 人物传记\n"
+                       "   4. 评估验证需求：是否需要多源交叉验证"
         }
 
         analysis = await self._analyze_query(content)
 
-        # 输出分析结果
-        analysis_text = f"""✓ 问题分析完成
-
-【核心实体】
-{chr(10).join(['- ' + e for e in analysis.get('core_entities', [])])}
-
-【核心问题】
-{analysis.get('core_question', '')}
-
-【查询意图】
-{analysis.get('query_intent', '')}
-
-【信息类型】
-{', '.join(analysis.get('info_types', []))}
-
-【多源交叉验证】
-{'是' if analysis.get('need_cross_validation') else '否'}"""
+        # 输出详细分析结果
+        core_entities = analysis.get('core_entities', [])
+        core_question = analysis.get('core_question', '')
+        query_intent = analysis.get('query_intent', '')
+        info_types = analysis.get('info_types', [])
+        need_cross = analysis.get('need_cross_validation', False)
 
         yield {
             "type": "reasoning",
             "agent": "parser",
-            "step": "问题分析",
-            "content": analysis_text
+            "step": "实体识别",
+            "content": f"🔍 核心实体识别:\n" +
+                       chr(10).join([f"   • {e}" for e in core_entities])
         }
 
-        # 搜索策略
+        yield {
+            "type": "reasoning",
+            "agent": "parser",
+            "step": "问题提炼",
+            "content": f"🎯 核心问题:\n   {core_question}\n\n" +
+                       f"💭 查询意图:\n   {query_intent}"
+        }
+
+        yield {
+            "type": "reasoning",
+            "agent": "parser",
+            "step": "信息类型",
+            "content": f"📋 信息类型分析:\n" +
+                       chr(10).join([f"   • {t}" for t in info_types]) +
+                       f"\n\n🔗 多源交叉验证: {'需要' if need_cross else '不需要'}"
+        }
+
+        # 搜索策略 - 详细说明
+        search_strategy = analysis.get('search_strategy', '')
         yield {
             "type": "reasoning",
             "agent": "parser",
             "step": "搜索策略",
-            "content": f"搜索策略规划:\n{analysis.get('search_strategy', '')}"
+            "content": f"📊 搜索策略规划:\n   {search_strategy}\n\n" +
+                       "   策略原则:\n" +
+                       "   • 从宽泛到具体：先了解整体背景，再深入细节\n" +
+                       "   • 多语言覆盖：中英文结合，获取更全面信息\n" +
+                       "   • 多角度验证：官方、媒体、社交平台多方印证\n" +
+                       "   • 时效性优先：优先获取最新、最权威的信息"
         }
 
-        # 搜索查询
+        # 搜索查询 - 逐个说明
         queries = analysis.get("search_queries", [])
-        queries_text = "\n".join([f"{i+1}. {q}" for i, q in enumerate(queries)])
-
         yield {
             "type": "reasoning",
             "agent": "parser",
-            "step": "搜索查询",
-            "content": f"✓ 生成 {len(queries)} 条精准搜索查询:\n{queries_text}"
+            "step": "查询生成",
+            "content": f"📝 生成 {len(queries)} 条精准搜索查询:"
         }
+
+        for i, query in enumerate(queries, 1):
+            yield {
+                "type": "reasoning",
+                "agent": "parser",
+                "step": f"查询{i}",
+                "content": f"   {i}. {query}\n" +
+                           f"      目的: 从不同角度收集信息，确保全面覆盖"
+            }
 
         result = {
             "task_id": task_id,

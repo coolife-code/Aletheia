@@ -22,9 +22,9 @@ async def verify_content(request: VerifyRequest):
     鉴定舆情内容的真实性（非流式版本）
     
     流程：
-    1. Parser Agent 解析内容
-    2. Search Agent 使用 DeepSeek 联网搜索证据
-    3. Verdict Agent 生成鉴定结论
+    1. Parser Agent 解析内容，生成搜索策略
+    2. Search Agent 深度搜索和分析证据
+    3. Verdict Agent 多维度鉴定结论
     """
     try:
         # Step 1: 解析内容
@@ -40,13 +40,15 @@ async def verify_content(request: VerifyRequest):
                 reasoning_chain=[]
             )
         
-        # Step 2: 搜索证据（使用 DeepSeek 联网功能）
-        search_result = await search_agent.search(parser_result)
+        # Step 2: 深度搜索和分析（传入原始内容）
+        search_result = await search_agent.search(parser_result, request.content)
         
-        # Step 3: 生成鉴定结论
+        # Step 3: 多维度鉴定结论
         verdict_result = await verdict_agent.verdict(search_result, request.content)
         
-        # 构建响应
+        # 构建响应 - 合并关键信源和普通信源
+        all_sources = search_result.get("all_sources", [])
+        
         evidence_list = [
             {
                 "evidence_id": s.get("evidence_id"),
@@ -59,9 +61,14 @@ async def verify_content(request: VerifyRequest):
                 "content_snippet": s.get("content_snippet"),
                 "relevance_score": s.get("relevance_score"),
                 "evidence_type": s.get("evidence_type"),
+                "is_key_source": s.get("is_key_source", False),
+                "key_insight": s.get("key_insight", ""),
+                "importance_note": s.get("importance_note", ""),
+                "source_stance": s.get("source_stance", "neutral"),
+                "potential_bias": s.get("potential_bias", ""),
                 "supports": True
             }
-            for s in search_result.get("query_sources", [])
+            for s in all_sources
         ]
         
         return VerifyResponse(
@@ -70,7 +77,12 @@ async def verify_content(request: VerifyRequest):
             confidence_score=verdict_result.get("confidence_score"),
             summary=verdict_result.get("conclusion_summary"),
             evidence_list=evidence_list,
-            reasoning_chain=verdict_result.get("reasoning_chain", [])
+            reasoning_chain=verdict_result.get("reasoning_chain", []),
+            # 扩展字段
+            dimensional_analysis=verdict_result.get("dimensional_analysis", {}),
+            multi_angle_reasoning=verdict_result.get("multi_angle_reasoning", {}),
+            key_sources_cited=verdict_result.get("key_sources_cited", []),
+            search_analysis=search_result.get("analysis", {})
         )
         
     except Exception as e:
@@ -80,7 +92,7 @@ async def verify_content(request: VerifyRequest):
 @router.post("/verify/stream")
 async def verify_content_stream(request: VerifyRequest):
     """
-    流式鉴定舆情内容，实时返回每个 Agent 的推理过程
+    流式鉴定舆情内容，实时返回每个 Agent 的详细推理过程
     
     返回格式：
     {
@@ -114,9 +126,9 @@ async def verify_content_stream(request: VerifyRequest):
                 yield f"data: {json.dumps({'type': 'error', 'message': '解析失败'}, ensure_ascii=False)}\n\n"
                 return
             
-            # ==================== Step 2: Search Agent (DeepSeek 联网) ====================
+            # ==================== Step 2: Search Agent (深度搜索分析) ====================
             search_result_data = None
-            async for search_event in search_agent.search_stream(parser_result_data):
+            async for search_event in search_agent.search_stream(parser_result_data, request.content):
                 yield f"data: {json.dumps(search_event, ensure_ascii=False)}\n\n"
                 if search_event.get("type") == "result":
                     search_result_data = search_event.get("data")
@@ -126,7 +138,7 @@ async def verify_content_stream(request: VerifyRequest):
                 yield f"data: {json.dumps({'type': 'error', 'message': '搜索失败'}, ensure_ascii=False)}\n\n"
                 return
             
-            # ==================== Step 3: Verdict Agent ====================
+            # ==================== Step 3: Verdict Agent (多维度鉴定) ====================
             verdict_result_data = None
             async for verdict_event in verdict_agent.verdict_stream(search_result_data, request.content):
                 yield f"data: {json.dumps(verdict_event, ensure_ascii=False)}\n\n"
@@ -136,7 +148,9 @@ async def verify_content_stream(request: VerifyRequest):
             
             # ==================== 最终结果 ====================
             if verdict_result_data:
-                # 构建证据列表
+                # 构建完整的证据列表
+                all_sources = search_result_data.get("all_sources", [])
+                
                 evidence_list = [
                     {
                         "evidence_id": s.get("evidence_id"),
@@ -149,18 +163,60 @@ async def verify_content_stream(request: VerifyRequest):
                         "content_snippet": s.get("content_snippet"),
                         "relevance_score": s.get("relevance_score"),
                         "evidence_type": s.get("evidence_type"),
+                        "is_key_source": s.get("is_key_source", False),
+                        "key_insight": s.get("key_insight", ""),
+                        "importance_note": s.get("importance_note", ""),
+                        "source_stance": s.get("source_stance", "neutral"),
+                        "potential_bias": s.get("potential_bias", ""),
+                        "deep_analysis": s.get("deep_analysis", ""),
+                        "unique_value": s.get("unique_value", ""),
                         "supports": True
                     }
-                    for s in search_result_data.get("query_sources", [])
+                    for s in all_sources
                 ]
                 
+                # 构建完整的最终结果
                 final_result = {
                     "verdict_id": verdict_result_data.get("verdict_id"),
                     "conclusion": verdict_result_data.get("conclusion"),
                     "confidence_score": verdict_result_data.get("confidence_score"),
                     "summary": verdict_result_data.get("conclusion_summary"),
                     "evidence_list": evidence_list,
-                    "reasoning_chain": verdict_result_data.get("reasoning_chain", [])
+                    "reasoning_chain": verdict_result_data.get("reasoning_chain", []),
+                    
+                    # Search Agent 的深度分析结果
+                    "search_analysis": {
+                        "key_findings": search_result_data.get("analysis", {}).get("key_findings", []),
+                        "conflict_points": search_result_data.get("analysis", {}).get("conflict_points", []),
+                        "evidence_gaps": search_result_data.get("analysis", {}).get("evidence_gaps", []),
+                        "analysis_reasoning": search_result_data.get("analysis", {}).get("analysis_reasoning", ""),
+                        "perspectives": search_result_data.get("analysis", {}).get("perspectives", {}),
+                        "search_reasoning_chain": search_result_data.get("analysis", {}).get("search_reasoning_chain", [])
+                    },
+                    
+                    # Verdict Agent 的多维度分析
+                    "dimensional_analysis": verdict_result_data.get("dimensional_analysis", {}),
+                    "multi_angle_reasoning": verdict_result_data.get("multi_angle_reasoning", {}),
+                    "evidence_evaluation": verdict_result_data.get("evidence_evaluation", {}),
+                    
+                    # 关键信源引用
+                    "key_sources_cited": verdict_result_data.get("key_sources_cited", []),
+                    
+                    # 发现分类
+                    "findings": verdict_result_data.get("findings", {}),
+                    
+                    # 证据链
+                    "evidence_chain": verdict_result_data.get("evidence_chain", []),
+                    
+                    # 元数据
+                    "metadata": {
+                        "parser_task_id": parser_result_data.get("task_id"),
+                        "search_task_id": search_result_data.get("search_id"),
+                        "verdict_task_id": verdict_result_data.get("verdict_id"),
+                        "total_sources": len(all_sources),
+                        "key_sources_count": len(search_result_data.get("key_sources", [])),
+                        "analysis_depth": "deep"
+                    }
                 }
                 
                 yield f"data: {json.dumps({'type': 'complete', 'result': final_result}, ensure_ascii=False)}\n\n"
