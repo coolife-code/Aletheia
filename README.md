@@ -77,8 +77,8 @@
 ### 1. 克隆项目
 
 ```bash
-git clone https://github.com/yourusername/aletheia.git
-cd aletheia
+git clone https://github.com/coolife-code/Aletheia.git
+cd Aletheia
 ```
 
 ### 2. 配置环境变量

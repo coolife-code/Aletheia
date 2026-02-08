@@ -1,13 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { InputBox } from '@/components/InputBox';
 import { VerifyButton } from '@/components/VerifyButton';
 import { ResultCard } from '@/components/ResultCard';
 import { EvidenceList } from '@/components/EvidenceList';
-import { ReasoningPanel } from '@/components/ReasoningPanel';
-import { verifyContent, verifyContentStream } from '@/lib/api';
-import { VerifyResponse, LoadingStepType } from '@/types';
+import ReasoningPanel from '@/components/ReasoningPanel';
+import { verifyContentStream } from '@/lib/api';
+import { VerifyResponse, StreamEvent, LoadingStepType } from '@/types';
 import { AlertCircle } from 'lucide-react';
 
 export default function Home() {
@@ -16,6 +16,7 @@ export default function Home() {
   const [loadingStep, setLoadingStep] = useState<LoadingStepType>('parsing');
   const [result, setResult] = useState<VerifyResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [streamEvents, setStreamEvents] = useState<StreamEvent[]>([]);
 
   const handleVerify = async () => {
     if (!inputContent.trim()) return;
@@ -23,24 +24,34 @@ export default function Home() {
     setIsLoading(true);
     setError(null);
     setResult(null);
+    setStreamEvents([]);
 
     try {
-      // 使用流式 API 获取进度更新
-      for await (const data of verifyContentStream({ content: inputContent })) {
-        if (data.step === 'parsing') {
-          setLoadingStep('parsing');
-        } else if (data.step === 'searching') {
-          setLoadingStep('searching');
-        } else if (data.step === 'verifying') {
-          setLoadingStep('verifying');
-        } else if (data.step === 'complete' && data.result) {
-          setResult(data.result);
-        } else if (data.step === 'error') {
-          setError(data.message || '鉴定过程出错');
+      // 使用流式 API，实时接收推理过程
+      const finalResult = await verifyContentStream(
+        { content: inputContent },
+        (event: StreamEvent) => {
+          // 实时更新推理事件
+          setStreamEvents(prev => [...prev, event]);
+
+          // 更新加载步骤
+          if (event.agent === 'parser') {
+            setLoadingStep('parsing');
+          } else if (event.agent === 'search') {
+            setLoadingStep('searching');
+          } else if (event.agent === 'verdict') {
+            setLoadingStep('verifying');
+          }
         }
+      );
+
+      if (finalResult) {
+        setResult(finalResult);
+        setLoadingStep('complete');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : '网络错误，请稍后重试');
+      setLoadingStep('error');
     } finally {
       setIsLoading(false);
     }
@@ -50,11 +61,13 @@ export default function Home() {
     setInputContent('');
     setResult(null);
     setError(null);
+    setStreamEvents([]);
+    setLoadingStep('parsing');
   };
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
-      <div className="max-w-3xl mx-auto px-4 py-12 md:py-16">
+      <div className="max-w-4xl mx-auto px-4 py-12 md:py-16">
         {/* 头部 */}
         <div className="text-center mb-10">
           <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-3">
@@ -92,9 +105,9 @@ export default function Home() {
               <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
             </div>
             <p className="text-sm text-gray-400">
-              {loadingStep === 'parsing' && '正在解析内容，提取关键主张...'}
-              {loadingStep === 'searching' && '正在全网搜索相关证据...'}
-              {loadingStep === 'verifying' && '正在进行交叉验证和逻辑分析...'}
+              {loadingStep === 'parsing' && 'Parser Agent 正在解析内容...'}
+              {loadingStep === 'searching' && 'Search Agent 正在搜索证据...'}
+              {loadingStep === 'verifying' && 'Verdict Agent 正在分析鉴定...'}
             </p>
           </div>
         )}
@@ -109,6 +122,13 @@ export default function Home() {
                 <p className="text-sm text-red-600">{error}</p>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* 实时推理过程 */}
+        {(isLoading || streamEvents.length > 0) && (
+          <div className="mt-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <ReasoningPanel events={streamEvents} isLoading={isLoading} />
           </div>
         )}
 
@@ -136,14 +156,11 @@ export default function Home() {
 
             {/* 证据列表 */}
             <EvidenceList evidenceList={result.evidence_list} />
-
-            {/* 推理过程 */}
-            <ReasoningPanel reasoningChain={result.reasoning_chain} />
           </div>
         )}
 
         {/* 初始状态提示 */}
-        {!result && !isLoading && !error && (
+        {!result && !isLoading && !error && streamEvents.length === 0 && (
           <div className="mt-12 text-center text-gray-400">
             <p className="text-sm">👆 输入内容，点击鉴定按钮开始分析</p>
           </div>

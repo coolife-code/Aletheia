@@ -36,6 +36,28 @@ export interface LoadingStep {
   message: string;
 }
 
+// 流式事件类型
+export interface StreamEvent {
+  type: 'start' | 'reasoning' | 'result' | 'complete' | 'error';
+  agent?: 'parser' | 'search' | 'verdict';
+  step?: string;
+  content?: string;
+  data?: any;
+  result?: VerifyResponse;
+  needs_clarification?: boolean;
+  clarification_prompt?: string;
+  message?: string;
+}
+
+// 推理步骤类型
+export interface ReasoningStep {
+  id: string;
+  agent: 'parser' | 'search' | 'verdict';
+  step: string;
+  content: string;
+  timestamp: number;
+}
+
 export const CONCLUSION_CONFIG: Record<ConclusionType, {
   label: string;
   icon: string;
@@ -70,5 +92,28 @@ export const CONCLUSION_CONFIG: Record<ConclusionType, {
     color: '#6b7280',
     bgColor: 'bg-gray-50',
     description: '缺乏依据'
+  }
+};
+
+// Agent 配置
+export const AGENT_CONFIG: Record<string, {
+  name: string;
+  icon: string;
+  color: string;
+}> = {
+  parser: {
+    name: 'Parser Agent',
+    icon: '🔄',
+    color: '#3b82f6'
+  },
+  search: {
+    name: 'Search Agent',
+    icon: '🔍',
+    color: '#8b5cf6'
+  },
+  verdict: {
+    name: 'Verdict Agent',
+    icon: '🧠',
+    color: '#10b981'
   }
 };

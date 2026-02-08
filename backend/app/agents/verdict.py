@@ -1,6 +1,6 @@
 import json
 import uuid
-from typing import List, Dict, Any
+from typing import List, Dict, Any, AsyncGenerator
 import openai
 from anthropic import Anthropic
 import asyncio
@@ -17,7 +17,7 @@ class VerdictAgent:
         self.openai_client = openai.AsyncOpenAI(
             api_key=settings.OPENAI_API_KEY,
             base_url=settings.OPENAI_BASE_URL,
-            timeout=60.0  # 增加超时时间到60秒
+            timeout=60.0
         ) if settings.OPENAI_API_KEY else None
         self.anthropic_client = Anthropic(
             api_key=settings.ANTHROPIC_API_KEY
@@ -26,16 +26,7 @@ class VerdictAgent:
         self.temperature = settings.VERDICT_LLM_TEMPERATURE
     
     async def verdict(self, search_result: Dict[str, Any], original_content: str) -> Dict[str, Any]:
-        """
-        基于搜索结果生成鉴定结论
-        
-        Args:
-            search_result: Search Agent 的输出
-            original_content: 原始舆情内容
-            
-        Returns:
-            完整鉴定报告
-        """
+        """基于搜索结果生成鉴定结论（非流式版本）"""
         print(f"[VerdictAgent] Starting verdict with {len(search_result.get('query_sources', []))} sources")
         verdict_id = str(uuid.uuid4())
         sources = search_result.get("query_sources", [])
@@ -44,19 +35,15 @@ class VerdictAgent:
             print("[VerdictAgent] No sources found, returning unverifiable result")
             return self._create_unverifiable_result(verdict_id, search_result.get("search_id"))
         
-        # 构建提示词
         prompt = self._build_verdict_prompt(original_content, sources)
         print(f"[VerdictAgent] Prompt built, calling LLM...")
         
-        # 调用 LLM 进行鉴定
         result_text = await self._call_llm(prompt)
         print(f"[VerdictAgent] LLM call completed, response length: {len(result_text) if result_text else 0}")
         
-        # 解析结果
         result = self._parse_llm_response(result_text, sources)
         print(f"[VerdictAgent] Parsed result: conclusion={result.get('conclusion')}, confidence={result.get('confidence_score')}")
         
-        # 构建证据链
         evidence_chain = self._build_evidence_chain(sources, result.get("supports", []))
         
         return {
@@ -84,6 +71,149 @@ class VerdictAgent:
             },
             "generated_at": str(uuid.uuid1()),
             "processing_time_ms": 2800
+        }
+    
+    async def verdict_stream(self, search_result: Dict[str, Any], original_content: str) -> AsyncGenerator[Dict[str, Any], None]:
+        """
+        流式鉴定，实时返回推理过程
+        
+        Yields:
+            {
+                "type": "reasoning" | "result",
+                "agent": "verdict",
+                "step": "证据分析" | "交叉验证" | "结论生成",
+                "content": "推理内容",
+                "data": {}  # 最终结果时包含
+            }
+        """
+        verdict_id = str(uuid.uuid4())
+        sources = search_result.get("query_sources", [])
+        
+        # 开始鉴定
+        yield {
+            "type": "reasoning",
+            "agent": "verdict",
+            "step": "证据分析",
+            "content": f"开始鉴定分析，共找到 {len(sources)} 个相关信源..."
+        }
+        
+        if not sources:
+            yield {
+                "type": "reasoning",
+                "agent": "verdict",
+                "step": "证据分析",
+                "content": "⚠ 未找到任何相关信源，无法完成鉴定"
+            }
+            result = self._create_unverifiable_result(verdict_id, search_result.get("search_id"))
+            yield {
+                "type": "result",
+                "agent": "verdict",
+                "data": result
+            }
+            return
+        
+        # 分析每个信源
+        yield {
+            "type": "reasoning",
+            "agent": "verdict",
+            "step": "证据分析",
+            "content": "正在分析各信源的可信度和相关性..."
+        }
+        
+        for i, source in enumerate(sources[:5], 1):
+            credibility = source.get("source_credibility", "medium")
+            domain = source.get("source_domain", "未知")
+            title = source.get("title", "")[:50]
+            
+            yield {
+                "type": "reasoning",
+                "agent": "verdict",
+                "step": "证据分析",
+                "content": f"  信源 {i}: {domain}\n"
+                           f"    - 可信度: {credibility}\n"
+                           f"    - 标题: {title}..."
+            }
+        
+        # 构建提示词并调用 LLM
+        prompt = self._build_verdict_prompt_stream(original_content, sources)
+        
+        yield {
+            "type": "reasoning",
+            "agent": "verdict",
+            "step": "交叉验证",
+            "content": "正在进行交叉验证，对比多个信源的信息..."
+        }
+        
+        # 调用 LLM 获取结果和推理过程
+        result_text = await self._call_llm(prompt)
+        result = self._parse_llm_response(result_text, sources)
+        
+        # 输出推理过程
+        reasoning_chain = result.get("reasoning_chain", [])
+        if reasoning_chain:
+            yield {
+                "type": "reasoning",
+                "agent": "verdict",
+                "step": "交叉验证",
+                "content": "推理过程:\n" + "\n".join([f"  {i+1}. {r}" for i, r in enumerate(reasoning_chain)])
+            }
+        
+        # 结论生成
+        conclusion = result.get("conclusion", "uncertain")
+        confidence = result.get("confidence_score", 0.5)
+        summary = result.get("summary", "")
+        
+        conclusion_map = {
+            "true": "✓ 真实",
+            "false": "✗ 虚假",
+            "uncertain": "? 存疑",
+            "unverifiable": "- 无法核实"
+        }
+        
+        yield {
+            "type": "reasoning",
+            "agent": "verdict",
+            "step": "结论生成",
+            "content": f"鉴定完成！\n"
+                       f"结论: {conclusion_map.get(conclusion, conclusion)}\n"
+                       f"置信度: {confidence:.0%}\n"
+                       f"摘要: {summary}"
+        }
+        
+        # 构建最终结果
+        evidence_chain = self._build_evidence_chain(sources, result.get("supports", []))
+        
+        final_result = {
+            "verdict_id": verdict_id,
+            "search_task_ref": search_result.get("search_id"),
+            "conclusion": conclusion,
+            "confidence_score": confidence,
+            "conclusion_summary": summary,
+            "reasoning_chain": reasoning_chain,
+            "evidence_chain": evidence_chain,
+            "findings": {
+                "verified_claims": result.get("verified_claims", []),
+                "refuted_claims": result.get("refuted_claims", []),
+                "uncertain_claims": result.get("uncertain_claims", [])
+            },
+            "traceability_log": {
+                "agent_version": "1.0",
+                "processing_steps": ["evidence_analysis", "cross_validation", "reasoning", "conclusion"],
+                "decision_points": [],
+                "confidence_breakdown": {
+                    "source_credibility": 0.9,
+                    "evidence_consistency": 0.85,
+                    "coverage_completeness": 0.95
+                }
+            },
+            "generated_at": str(uuid.uuid1()),
+            "processing_time_ms": 2800
+        }
+        
+        yield {
+            "type": "result",
+            "agent": "verdict",
+            "data": final_result
         }
     
     def _build_verdict_prompt(self, content: str, sources: List[Dict[str, Any]]) -> str:
@@ -134,6 +264,54 @@ class VerdictAgent:
 3. 置信度分数范围 0-1
 4. 只返回JSON，不要其他内容"""
     
+    def _build_verdict_prompt_stream(self, content: str, sources: List[Dict[str, Any]]) -> str:
+        """构建流式鉴定的提示词（包含更详细的推理要求）"""
+        sources_text = "\n\n".join([
+            f"来源 {i+1}:\n"
+            f"- 标题: {s.get('title', '')}\n"
+            f"- 域名: {s.get('source_domain', '')}\n"
+            f"- 可信度: {s.get('source_credibility', 'medium')}\n"
+            f"- 摘要: {s.get('content_snippet', '')}"
+            for i, s in enumerate(sources[:5])
+        ])
+        
+        return f"""你是一个专业的事实核查专家。请根据提供的搜索结果，对以下舆情内容进行真实性鉴定。
+
+待鉴定内容：
+{content}
+
+搜索结果：
+{sources_text}
+
+请按以下JSON格式输出鉴定结果：
+{{
+    "conclusion": "true|false|uncertain|unverifiable",
+    "confidence_score": 0.85,
+    "summary": "鉴定结论摘要（100字以内）",
+    "reasoning_chain": [
+        "详细推理步骤1：分析待鉴定内容的核心主张，提取关键实体和事件",
+        "详细推理步骤2：逐一评估各证据的可信度、时效性和相关性",
+        "详细推理步骤3：对比多个信源，找出一致点和矛盾点",
+        "详细推理步骤4：基于证据权重和逻辑分析得出最终结论"
+    ],
+    "verified_claims": ["已证实的主张"],
+    "refuted_claims": ["已证伪的主张"],
+    "uncertain_claims": ["存疑的主张"],
+    "supports": [true, false, true]
+}}
+
+结论类型说明：
+- true: 内容属实，有多个高可信度信源证实
+- false: 内容虚假，有明确证据证伪
+- uncertain: 存疑，证据不足或相互矛盾
+- unverifiable: 无法核实，缺乏可验证的客观依据
+
+要求：
+1. 必须基于提供的证据进行分析
+2. reasoning_chain 每一步都要详细说明分析思路
+3. 置信度分数范围 0-1，并说明依据
+4. 只返回JSON，不要其他内容"""
+    
     async def _call_llm(self, prompt: str) -> str:
         """调用 LLM"""
         try:
@@ -180,10 +358,8 @@ class VerdictAgent:
             print("[VerdictAgent] Warning: Empty LLM response")
             return self._create_default_result(sources)
         
-        # 尝试提取 JSON 部分
         text = result_text.strip()
         
-        # 移除可能的 markdown 代码块
         if text.startswith("```json"):
             text = text[7:]
         elif text.startswith("```"):
@@ -193,7 +369,6 @@ class VerdictAgent:
         
         text = text.strip()
         
-        # 尝试解析 JSON
         try:
             result = json.loads(text)
             print(f"[VerdictAgent] Successfully parsed JSON response")
