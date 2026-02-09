@@ -38,4 +38,5 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
-next-env.d.ts
+# next-env.d.ts 需要提交到版本控制，用于 Docker 构建
+# next-env.d.ts
