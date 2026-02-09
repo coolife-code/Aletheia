@@ -1,10 +1,8 @@
 {
   "sdk_type": "gradio",
-  "resource_configuration": {
-    "cpu": 2,
-    "memory": 4,
-    "gpu": 0
-  },
+  "sdk_version": "4.0.0",
+  "base_image": "python:3.10",
+  "resource_configuration": "platform/2v-cpu-16g-mem",
   "environment_variables": [
     {
       "name": "OPENAI_API_KEY",
