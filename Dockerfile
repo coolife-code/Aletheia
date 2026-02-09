@@ -10,10 +10,25 @@ WORKDIR /app/frontend
 
 # 复制前端依赖文件
 COPY frontend/package*.json ./
+COPY frontend/tsconfig.json ./
+
+# 安装依赖
 RUN npm ci
 
-# 复制前端源码并构建
-COPY frontend/ ./
+# 复制前端源码
+COPY frontend/src ./src
+COPY frontend/public ./public
+COPY frontend/next.config.ts ./
+COPY frontend/postcss.config.mjs ./
+COPY frontend/components.json ./
+COPY frontend/.gitignore ./
+COPY frontend/README.md ./
+COPY frontend/eslint.config.mjs ./
+
+# 创建必要的目录结构
+RUN mkdir -p src/lib src/components/ui
+
+# 构建前端
 RUN npm run build
 
 # ============================================
