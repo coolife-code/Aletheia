@@ -8,11 +8,24 @@ FROM node:20-slim AS frontend-builder
 
 WORKDIR /app
 
-# 复制整个前端目录
-COPY frontend/ ./
+# 先复制配置文件（利用 Docker 缓存层）
+COPY frontend/package*.json ./
+COPY frontend/tsconfig.json ./
+COPY frontend/jsconfig.json ./
+COPY frontend/next.config.ts ./
+COPY frontend/postcss.config.mjs ./
+COPY frontend/components.json ./
+COPY frontend/next-env.d.ts ./
 
-# 安装依赖并构建
-RUN npm ci && npm run build
+# 安装依赖
+RUN npm ci
+
+# 复制源码文件
+COPY frontend/src ./src
+COPY frontend/public ./public
+
+# 构建前端
+RUN npm run build
 
 # ============================================
 # 后端服务阶段
