@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { ConfidenceRing } from './ConfidenceRing';
-import { ConclusionType, CONCLUSION_CONFIG, MultiDimensionalAnalysis, MultiAngleReasoning, Findings } from '@/types';
+import { ConclusionType, CONCLUSION_CONFIG, MultiDimensionalAnalysis, MultiAngleReasoning, Findings } from '../types';
 import { ChevronDown, ChevronUp, Layers, Lightbulb, CheckCircle, XCircle, HelpCircle, AlertCircle } from 'lucide-react';
 
 interface ResultCardProps {

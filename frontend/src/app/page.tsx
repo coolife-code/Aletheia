@@ -1,13 +1,13 @@
 'use client';
 
 import React, { useState, useCallback } from 'react';
-import { InputBox } from '@/components/InputBox';
-import { VerifyButton } from '@/components/VerifyButton';
-import { ResultCard } from '@/components/ResultCard';
-import { EvidenceList } from '@/components/EvidenceList';
-import ReasoningPanel from '@/components/ReasoningPanel';
-import { verifyContentStream } from '@/lib/api';
-import { VerifyResponse, StreamEvent, LoadingStepType } from '@/types';
+import { InputBox } from '../components/InputBox';
+import { VerifyButton } from '../components/VerifyButton';
+import { ResultCard } from '../components/ResultCard';
+import { EvidenceList } from '../components/EvidenceList';
+import ReasoningPanel from '../components/ReasoningPanel';
+import { verifyContentStream } from '../lib/api';
+import { VerifyResponse, StreamEvent, LoadingStepType } from '../types';
 import { AlertCircle } from 'lucide-react';
 
 export default function Home() {

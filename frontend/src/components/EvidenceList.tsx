@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Badge } from './ui/badge';
 import { ExternalLink, Newspaper, Info, Star, AlertTriangle, ChevronDown, ChevronUp, Scale, Eye } from 'lucide-react';
-import { Evidence, SourceCredibility } from '@/types';
+import { Evidence, SourceCredibility } from '../types';
 
 interface EvidenceListProps {
   evidenceList: Evidence[];

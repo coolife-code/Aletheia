@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Card } from '@/components/ui/card';
-import { AGENT_CONFIG, ReasoningStep, StreamEvent } from '@/types';
+import { Card } from './ui/card';
+import { AGENT_CONFIG, ReasoningStep, StreamEvent } from '../types';
 
 interface ReasoningPanelProps {
   events: StreamEvent[];
