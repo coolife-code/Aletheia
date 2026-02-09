@@ -18,6 +18,14 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  // 配置路径别名
+  webpack: (config) => {
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@': require('path').resolve(__dirname, 'src'),
+    };
+    return config;
+  },
 };
 
 export default nextConfig;
