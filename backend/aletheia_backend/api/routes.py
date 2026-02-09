@@ -15,6 +15,15 @@ parser_agent = ParserAgent()
 search_agent = SearchAgent()
 verdict_agent = VerdictAgent()
 
+# 并发控制 - 限制同时处理的鉴定请求数
+# 防止过多并发请求导致 LLM API 限流或内存溢出
+MAX_CONCURRENT_VERIFICATIONS = 3
+_verification_semaphore = asyncio.Semaphore(MAX_CONCURRENT_VERIFICATIONS)
+
+# 跟踪当前正在处理的请求数（用于监控）
+_current_active_requests = 0
+_request_lock = asyncio.Lock()
+
 
 @router.post("/verify", response_model=VerifyResponse)
 async def verify_content(request: VerifyRequest):
@@ -26,9 +35,17 @@ async def verify_content(request: VerifyRequest):
     2. Search Agent 深度搜索和分析证据
     3. Verdict Agent 多维度鉴定结论
     """
-    try:
-        # Step 1: 解析内容
-        parser_result = await parser_agent.parse(request.content)
+    global _current_active_requests
+    
+    # 获取并发控制锁
+    async with _verification_semaphore:
+        async with _request_lock:
+            _current_active_requests += 1
+            print(f"[Verify] 开始处理请求，当前活跃请求数: {_current_active_requests}")
+        
+        try:
+            # Step 1: 解析内容
+            parser_result = await parser_agent.parse(request.content)
         
         if parser_result.get("needs_clarification"):
             return VerifyResponse(
@@ -71,19 +88,23 @@ async def verify_content(request: VerifyRequest):
             for s in all_sources
         ]
         
-        return VerifyResponse(
-            verdict_id=verdict_result.get("verdict_id"),
-            conclusion=verdict_result.get("conclusion"),
-            confidence_score=verdict_result.get("confidence_score"),
-            summary=verdict_result.get("conclusion_summary"),
-            evidence_list=evidence_list,
-            reasoning_chain=verdict_result.get("reasoning_chain", []),
-            # 扩展字段
-            dimensional_analysis=verdict_result.get("dimensional_analysis", {}),
-            multi_angle_reasoning=verdict_result.get("multi_angle_reasoning", {}),
-            key_sources_cited=verdict_result.get("key_sources_cited", []),
-            search_analysis=search_result.get("analysis", {})
-        )
+            return VerifyResponse(
+                verdict_id=verdict_result.get("verdict_id"),
+                conclusion=verdict_result.get("conclusion"),
+                confidence_score=verdict_result.get("confidence_score"),
+                summary=verdict_result.get("conclusion_summary"),
+                evidence_list=evidence_list,
+                reasoning_chain=verdict_result.get("reasoning_chain", []),
+                # 扩展字段
+                dimensional_analysis=verdict_result.get("dimensional_analysis", {}),
+                multi_angle_reasoning=verdict_result.get("multi_angle_reasoning", {}),
+                key_sources_cited=verdict_result.get("key_sources_cited", []),
+                search_analysis=search_result.get("analysis", {})
+            )
+        finally:
+            async with _request_lock:
+                _current_active_requests -= 1
+                print(f"[Verify] 请求处理完成，当前活跃请求数: {_current_active_requests}")
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"鉴定过程出错: {str(e)}")
@@ -104,27 +125,35 @@ async def verify_content_stream(request: VerifyRequest):
     }
     """
     async def event_generator():
-        try:
-            # ==================== Step 1: Parser Agent ====================
-            parser_result_data = None
-            async for parser_event in parser_agent.parse_stream(request.content):
-                yield f"data: {json.dumps(parser_event, ensure_ascii=False)}\n\n"
-                if parser_event.get("type") == "result":
-                    parser_result_data = parser_event.get("data")
-                await asyncio.sleep(0.05)
+        global _current_active_requests
+        
+        # 获取并发控制锁
+        async with _verification_semaphore:
+            async with _request_lock:
+                _current_active_requests += 1
+                print(f"[Verify Stream] 开始处理请求，当前活跃请求数: {_current_active_requests}")
             
-            # 检查是否需要澄清
-            if parser_result_data and parser_result_data.get("needs_clarification"):
-                yield f"data: {json.dumps({
-                    'type': 'complete',
-                    'needs_clarification': True,
-                    'clarification_prompt': parser_result_data.get('clarification_prompt')
-                }, ensure_ascii=False)}\n\n"
-                return
-            
-            if not parser_result_data:
-                yield f"data: {json.dumps({'type': 'error', 'message': '解析失败'}, ensure_ascii=False)}\n\n"
-                return
+            try:
+                # ==================== Step 1: Parser Agent ====================
+                parser_result_data = None
+                async for parser_event in parser_agent.parse_stream(request.content):
+                    yield f"data: {json.dumps(parser_event, ensure_ascii=False)}\n\n"
+                    if parser_event.get("type") == "result":
+                        parser_result_data = parser_event.get("data")
+                    await asyncio.sleep(0.05)
+                
+                # 检查是否需要澄清
+                if parser_result_data and parser_result_data.get("needs_clarification"):
+                    yield f"data: {json.dumps({
+                        'type': 'complete',
+                        'needs_clarification': True,
+                        'clarification_prompt': parser_result_data.get('clarification_prompt')
+                    }, ensure_ascii=False)}\n\n"
+                    return
+                
+                if not parser_result_data:
+                    yield f"data: {json.dumps({'type': 'error', 'message': '解析失败'}, ensure_ascii=False)}\n\n"
+                    return
             
             # ==================== Step 2: Search Agent (深度搜索分析) ====================
             search_result_data = None
@@ -223,6 +252,11 @@ async def verify_content_stream(request: VerifyRequest):
             else:
                 yield f"data: {json.dumps({'type': 'error', 'message': '鉴定过程未完成'}, ensure_ascii=False)}\n\n"
             
+            finally:
+                async with _request_lock:
+                    _current_active_requests -= 1
+                    print(f"[Verify Stream] 请求处理完成，当前活跃请求数: {_current_active_requests}")
+            
         except Exception as e:
             print(f"[Stream Error] {str(e)}")
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
@@ -242,3 +276,17 @@ async def verify_content_stream(request: VerifyRequest):
 async def health_check():
     """健康检查接口"""
     return {"status": "ok", "service": "aletheia"}
+
+
+@router.get("/status")
+async def system_status():
+    """系统状态接口 - 查看当前并发情况"""
+    return {
+        "status": "ok",
+        "service": "aletheia",
+        "concurrency": {
+            "max_concurrent": MAX_CONCURRENT_VERIFICATIONS,
+            "current_active": _current_active_requests,
+            "available_slots": MAX_CONCURRENT_VERIFICATIONS - _current_active_requests
+        }
+    }

@@ -227,29 +227,30 @@ class SearchAgent:
 
             await asyncio.sleep(0.1)
 
-        # 深度分析阶段
+        # 深度分析阶段 - 只分析最重要的4-5篇
         yield {
             "type": "reasoning",
             "agent": "search",
-            "step": "深度分析",
-            "content": f"🧠 对 {len(all_sources)} 个信源进行深度分析...\n"
-                       f"   - 评估可信度和立场\n"
-                       f"   - 识别信息冲突点\n"
-                       f"   - 寻找关键突破口"
+            "step": "精选精读",
+            "content": f"🎯 从 {len(all_sources)} 个信源中精选最重要的进行精读...\n"
+                       f"   - 聚焦核心问题：{query_analysis.get('core_question', '')[:50]}...\n"
+                       f"   - 只精读4-5篇最关键的信源\n"
+                       f"   - 避免过度分析，服务于核心目标"
         }
 
         analyzed_sources = await self._analyze_sources_deep(
             all_sources, original_content, query_analysis
         )
 
+        deep_analyzed_count = sum(1 for s in analyzed_sources if s.get('is_deep_analyzed'))
         yield {
             "type": "reasoning",
             "agent": "search",
-            "step": "信源评估",
-            "content": f"📊 信源评估完成:\n"
-                       f"   - 高可信度: {sum(1 for s in analyzed_sources if s.get('source_credibility') == 'high')}\n"
-                       f"   - 中等可信度: {sum(1 for s in analyzed_sources if s.get('source_credibility') == 'medium')}\n"
-                       f"   - 发现偏见信源: {sum(1 for s in analyzed_sources if s.get('potential_bias'))}"
+            "step": "精读完成",
+            "content": f"✅ 精选精读完成:\n"
+                       f"   - 精读信源: {deep_analyzed_count} 篇\n"
+                       f"   - 其他信源: {len(analyzed_sources) - deep_analyzed_count} 篇（基础信息）\n"
+                       f"   - 聚焦核心问题，避免发散"
         }
 
         # 识别关键发现
@@ -387,78 +388,137 @@ class SearchAgent:
 
     async def _analyze_sources_deep(self, sources: List[Dict], original_content: str, query_analysis: Dict) -> List[Dict]:
         """
-        对所有信源进行深度分析，识别模式和问题
+        精选4-5篇最重要信源进行精读分析，聚焦核心问题
         """
         if not sources:
             return []
 
-        # 准备信源摘要
+        # 第一步：快速筛选出最有价值的候选信源（最多8个）
+        candidates = self._select_candidate_sources(sources, query_analysis)
+        
+        # 准备候选信源摘要
         sources_summary = []
-        for i, s in enumerate(sources[:15]):  # 最多分析15个
+        for i, s in enumerate(candidates):
             sources_summary.append({
                 "index": i,
                 "domain": s.get("source_domain", ""),
                 "title": s.get("title", "")[:80],
                 "credibility": s.get("source_credibility", "medium"),
                 "stance": s.get("source_stance", "neutral"),
-                "insight": s.get("key_insight", "")[:100]
+                "insight": s.get("key_insight", "")[:150],
+                "relevance_score": s.get("relevance_score", 0.5)
             })
 
-        prompt = f"""你是一位信息分析专家。请对以下信源集合进行深度分析。
+        prompt = f"""你是一位高效的信息分析师。你的任务是：从候选信源中精选4-5篇最重要的进行精读，直接服务于核心问题的验证。
 
-【原始问题】
+【核心任务】
 {original_content}
 
-【核心实体】
+【核心问题】
+{query_analysis.get('core_question', '')}
+
+【需要验证的关键点】
 {', '.join(query_analysis.get('core_entities', []))}
 
-【信源列表】
+【候选信源】
 {json.dumps(sources_summary, ensure_ascii=False, indent=2)}
 
-【你的分析任务】
-1. 识别信源之间的共识和分歧
-2. 发现信息冲突点
-3. 评估证据的完整性
-4. 识别可能的谣言传播路径
-5. 找出最关键的突破口
+【你的分析原则】
+1. **聚焦目标**：时刻记得你要证明/证伪什么，不要为了分析而分析
+2. **精选精读**：只选4-5篇最能帮助回答核心问题的信源深入分析
+3. **直接相关**：优先选择与核心问题直接相关、能提供关键证据的信源
+4. **多元视角**：确保选取的信源覆盖不同立场（支持/反对/中立）
+5. **证据价值**：评估每个信源对核心问题的证明/证伪价值
 
 请返回JSON格式：
 {{
+    "selected_indices": [0, 2, 3, 5, 7],
+    "selection_reasoning": "为什么选择这4-5篇信源，它们如何帮助回答核心问题",
     "source_analysis": [
         {{
             "index": 0,
-            "analysis": "对该信源的深度分析",
-            "reliability_concerns": "可靠性方面的担忧（如有）",
-            "unique_value": "该信源的独特价值"
+            "analysis": "精读分析：这个信源对核心问题的直接贡献",
+            "key_evidence": "该信源提供的关键证据（直接引用或总结）",
+            "evidence_value": "high|medium|low - 对证明/证伪核心问题的价值",
+            "reliability_concerns": "可靠性方面的担忧（如有）"
         }}
     ],
-    "cross_source_patterns": "跨信源的模式发现",
-    "recommended_focus": [0, 2, 5]
+    "evidence_summary": "综合这4-5篇信源，对核心问题的证据支持情况总结"
 }}
 
-请分析前10个信源，返回它们的深度分析。"""
+注意：只分析4-5篇最重要的信源，不要面面俱到。"""
 
         try:
             result_text = await self._call_llm_with_search(prompt)
             analysis_result = self._parse_search_result(result_text)
             
-            # 将分析结果合并到原信源
+            # 将分析结果合并到原信源（只针对被选中的信源）
+            selected_indices = analysis_result.get("selected_indices", [])
             source_analysis = analysis_result.get("source_analysis", [])
+            
+            # 标记被选中的信源
+            for idx in selected_indices:
+                if idx < len(candidates):
+                    original_idx = candidates[idx].get("_original_index", idx)
+                    if original_idx < len(sources):
+                        sources[original_idx]["is_deep_analyzed"] = True
+                        sources[original_idx]["selection_reasoning"] = analysis_result.get("selection_reasoning", "")
+            
+            # 合并深度分析结果
             for analysis in source_analysis:
                 idx = analysis.get("index", 0)
-                if idx < len(sources):
-                    sources[idx]["deep_analysis"] = analysis.get("analysis", "")
-                    sources[idx]["reliability_concerns"] = analysis.get("reliability_concerns", "")
-                    sources[idx]["unique_value"] = analysis.get("unique_value", "")
+                if idx < len(candidates):
+                    original_idx = candidates[idx].get("_original_index", idx)
+                    if original_idx < len(sources):
+                        sources[original_idx]["deep_analysis"] = analysis.get("analysis", "")
+                        sources[original_idx]["key_evidence"] = analysis.get("key_evidence", "")
+                        sources[original_idx]["evidence_value"] = analysis.get("evidence_value", "medium")
+                        sources[original_idx]["reliability_concerns"] = analysis.get("reliability_concerns", "")
 
+            print(f"[SearchAgent] Deep analyzed {len(selected_indices)} key sources out of {len(sources)} total")
             return sources
         except Exception as e:
             print(f"[SearchAgent] Deep analysis error: {e}")
             return sources
 
+    def _select_candidate_sources(self, sources: List[Dict], query_analysis: Dict) -> List[Dict]:
+        """
+        快速筛选最有价值的候选信源（最多8个）供精读
+        """
+        if not sources:
+            return []
+        
+        # 计算每个信源的初始分数
+        scored_sources = []
+        for i, source in enumerate(sources):
+            score = 0
+            
+            # 可信度权重（高可信度加分）
+            credibility_scores = {"high": 3, "medium": 2, "low": 1}
+            score += credibility_scores.get(source.get("source_credibility", "low"), 1) * 5
+            
+            # 相关度权重
+            score += source.get("relevance_score", 0.5) * 10
+            
+            # 证据类型（一手证据加分）
+            if source.get("evidence_type") == "primary":
+                score += 5
+            
+            # 是否有独特见解
+            if source.get("key_insight") and len(source.get("key_insight", "")) > 20:
+                score += 3
+            
+            source["_original_index"] = i
+            source["_candidate_score"] = score
+            scored_sources.append(source)
+        
+        # 按分数排序，取前8个
+        scored_sources.sort(key=lambda x: -x.get("_candidate_score", 0))
+        return scored_sources[:8]
+
     async def _identify_key_findings(self, sources: List[Dict], original_content: str, query_analysis: Dict) -> Dict[str, Any]:
         """
-        识别关键发现、冲突点和证据缺口
+        识别关键发现、冲突点和证据缺口 - 聚焦核心问题
         """
         if not sources:
             return {
@@ -466,61 +526,85 @@ class SearchAgent:
                 "conflict_points": [],
                 "evidence_gaps": ["未找到任何相关信源"],
                 "analysis_reasoning": "",
-                "perspectives": {}
+                "perspectives": {},
+                "key_source_indices": []
             }
+
+        # 优先使用已深度分析的信源，如果没有则选高可信度信源
+        deep_analyzed = [s for s in sources if s.get("is_deep_analyzed")]
+        if deep_analyzed:
+            key_sources = deep_analyzed[:6]
+        else:
+            # 按可信度排序取前8个
+            key_sources = sorted(
+                sources, 
+                key=lambda x: {"high": 3, "medium": 2, "low": 1}.get(x.get("source_credibility", "low"), 0),
+                reverse=True
+            )[:8]
 
         # 准备关键信息摘要
         key_info = []
-        for s in sources[:12]:
-            key_info.append({
-                "domain": s.get("source_domain", ""),
-                "insight": s.get("key_insight", "")[:150],
-                "stance": s.get("source_stance", "neutral"),
-                "credibility": s.get("source_credibility", "medium")
-            })
+        key_indices = []
+        for i, s in enumerate(sources):
+            if s in key_sources:
+                key_indices.append(i)
+                key_info.append({
+                    "index": i,
+                    "domain": s.get("source_domain", ""),
+                    "insight": s.get("key_insight", "")[:150],
+                    "stance": s.get("source_stance", "neutral"),
+                    "credibility": s.get("source_credibility", "medium"),
+                    "is_deep_analyzed": s.get("is_deep_analyzed", False),
+                    "evidence_value": s.get("evidence_value", "medium")
+                })
 
-        prompt = f"""你是一位资深的事实核查专家。基于收集到的信源，请进行深入分析。
+        prompt = f"""你是一位目标导向的事实核查专家。基于精选信源，直接回答核心问题。
 
-【待核实内容】
+【核心任务 - 时刻牢记】
 {original_content}
 
 【核心问题】
 {query_analysis.get('core_question', '')}
 
-【收集到的关键信息】
+【需要验证的关键点】
+{', '.join(query_analysis.get('core_entities', []))}
+
+【精选信源（已筛选出最重要的）】
 {json.dumps(key_info, ensure_ascii=False, indent=2)}
 
+【你的分析原则】
+1. **目标导向**：所有分析都服务于回答核心问题，不要发散
+2. **证据说话**：基于信源中的具体证据，而非泛泛而谈
+3. **聚焦关键**：只关注对核心问题有直接影响的信息
+4. **快速判断**：给出明确的倾向性判断，而非模棱两可
+
 【你的分析任务】
-1. 提炼核心发现（3-5条）
-2. 识别信息冲突点（不同信源之间的矛盾）
-3. 指出证据缺口（还需要什么信息）
-4. 分析不同立场的观点
-5. 给出你的专业判断和推理过程
+1. **核心发现**（2-4条）：直接回答核心问题的关键事实
+2. **信息冲突**（如有）：影响判断的关键矛盾点
+3. **证据缺口**：还缺少什么关键信息才能下定论
+4. **初步判断**：基于现有证据，核心问题的答案倾向
 
 请返回JSON格式：
 {{
     "findings": [
-        "核心发现1：基于高可信度信源的关键事实",
+        "核心发现1：直接关联核心问题的关键事实",
         "核心发现2：..."
     ],
     "conflict_points": [
-        "冲突点1：信源A说X，信源B说Y",
-        "冲突点2：..."
+        "关键冲突：直接影响判断的矛盾点"
     ],
     "evidence_gaps": [
-        "证据缺口1：缺少官方数据",
-        "证据缺口2：..."
+        "缺失的关键证据"
     ],
-    "analysis_reasoning": "详细的分析推理过程，包括你如何权衡不同信源、如何处理冲突信息",
+    "analysis_reasoning": "简洁的推理过程：基于什么证据，得出什么初步判断",
     "perspectives": {{
-        "supporting": "支持方的主要观点和证据",
-        "opposing": "反对方的主要观点和证据",
-        "neutral": "中立方的观察"
+        "supporting": "支持方的核心论据（一句话总结）",
+        "opposing": "反对方的核心论据（一句话总结）"
     }},
-    "key_source_indices": [0, 3, 5]
+    "key_source_indices": {key_indices[:5]}
 }}
 
-请确保分析深入、客观、专业。"""
+注意：保持简洁聚焦，不要过度分析。"""
 
         try:
             result_text = await self._call_llm_with_search(prompt)
@@ -647,7 +731,7 @@ class SearchAgent:
 
     def _rank_sources_by_importance(self, sources: List[Dict[str, Any]], key_findings: Dict) -> List[Dict[str, Any]]:
         """
-        按重要性排序信源，并标记关键信源
+        按重要性排序信源，优先展示被深度分析的关键信源
         """
         key_indices = set(key_findings.get("key_source_indices", []))
         
@@ -655,27 +739,31 @@ class SearchAgent:
         for i, source in enumerate(sources):
             score = 0
             
-            # 可信度权重
-            credibility_scores = {"high": 3, "medium": 2, "low": 1}
-            score += credibility_scores.get(source.get("source_credibility", "low"), 1) * 10
-            
-            # 相关度权重
-            score += source.get("relevance_score", 0.5) * 10
-            
+            # 是否被深度分析（最高优先级）
+            if source.get("is_deep_analyzed"):
+                score += 50
+                source["is_key_source"] = True
             # 是否被标记为关键信源
-            if i in key_indices:
-                score += 20
+            elif i in key_indices:
+                score += 30
                 source["is_key_source"] = True
             else:
                 source["is_key_source"] = False
             
-            # 是否有深度分析
-            if source.get("deep_analysis"):
-                score += 5
+            # 证据价值权重
+            evidence_value_scores = {"high": 15, "medium": 8, "low": 3}
+            score += evidence_value_scores.get(source.get("evidence_value", "medium"), 5)
             
-            # 是否有独特价值
-            if source.get("unique_value"):
-                score += 3
+            # 可信度权重
+            credibility_scores = {"high": 10, "medium": 5, "low": 2}
+            score += credibility_scores.get(source.get("source_credibility", "low"), 2)
+            
+            # 相关度权重
+            score += source.get("relevance_score", 0.5) * 10
+            
+            # 是否有一手证据
+            if source.get("evidence_type") == "primary":
+                score += 8
             
             source["importance_score"] = score
         
