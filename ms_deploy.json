@@ -16,26 +16,8 @@
   "cover": "https://github.com/coolife-code/aletheia/raw/main/assets/cover.png",
   "visibility": "public",
   "sdk_type": "docker",
-  "resource_configuration": {
-    "cpu": 2,
-    "memory": 4096,
-    "gpu": null
-  },
-  "ports": [
-    {
-      "port": 7860,
-      "protocol": "http",
-      "description": "Web 应用访问端口"
-    }
-  ],
-  "health_check": {
-    "path": "/",
-    "port": 7860,
-    "initial_delay": 30,
-    "interval": 10,
-    "timeout": 5,
-    "retries": 3
-  },
+  "port": 7860,
+  "resource_configuration": "platform/2v-cpu-16g-mem",
   "env": [
     {
       "name": "OPENAI_API_KEY",
