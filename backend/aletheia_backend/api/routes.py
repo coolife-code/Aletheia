@@ -3,10 +3,10 @@ from fastapi.responses import StreamingResponse
 import json
 import asyncio
 
-from app.models.schemas import VerifyRequest, VerifyResponse, LoadingStep
-from app.agents.parser import ParserAgent
-from app.agents.search import SearchAgent
-from app.agents.verdict import VerdictAgent
+from aletheia_backend.models.schemas import VerifyRequest, VerifyResponse, LoadingStep
+from aletheia_backend.agents.parser import ParserAgent
+from aletheia_backend.agents.search import SearchAgent
+from aletheia_backend.agents.verdict import VerdictAgent
 
 router = APIRouter()
 

@@ -4,7 +4,7 @@ Parser Agent V2 测试程序
 """
 import asyncio
 import json
-from app.agents.parser import ParserAgent
+from aletheia_backend.agents.parser import ParserAgent
 
 
 async def test_parser_v2():

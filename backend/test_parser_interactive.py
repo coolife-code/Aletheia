@@ -5,7 +5,7 @@
 import asyncio
 import json
 import sys
-from app.agents.parser import ParserAgent
+from aletheia_backend.agents.parser import ParserAgent
 
 
 async def test_parser_interactive():

@@ -5,7 +5,7 @@ import openai
 from anthropic import Anthropic
 import hashlib
 
-from app.core.config import settings
+from aletheia_backend.core.config import settings
 
 
 class ParserAgent:

@@ -3,9 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import uvicorn
 
-from app.core.config import settings
-from app.api.routes import router
-from app.db.database import init_db
+from aletheia_backend.core.config import settings
+from aletheia_backend.api.routes import router
+from aletheia_backend.db.database import init_db
 
 
 @asynccontextmanager

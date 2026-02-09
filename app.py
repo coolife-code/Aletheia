@@ -10,13 +10,17 @@ import asyncio
 import json
 from typing import AsyncGenerator
 
-# 将backend添加到Python路径
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'backend'))
+# 将backend添加到Python路径（确保在导入gradio之前）
+backend_path = os.path.join(os.path.dirname(__file__), 'backend')
+if backend_path not in sys.path:
+    sys.path.insert(0, backend_path)
+
+# 使用绝对导入，避免与系统app包冲突
+from aletheia_backend.agents.parser import ParserAgent
+from aletheia_backend.agents.search import SearchAgent
+from aletheia_backend.agents.verdict import VerdictAgent
 
 import gradio as gr
-from app.agents.parser import ParserAgent
-from app.agents.search import SearchAgent
-from app.agents.verdict import VerdictAgent
 
 # 初始化Agents
 parser_agent = ParserAgent()

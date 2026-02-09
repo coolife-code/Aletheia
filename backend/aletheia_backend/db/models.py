@@ -1,6 +1,6 @@
 from sqlalchemy import Column, String, Float, DateTime, Text, JSON, Integer
 from sqlalchemy.sql import func
-from app.db.database import Base
+from aletheia_backend.db.database import Base
 import uuid
 
 
