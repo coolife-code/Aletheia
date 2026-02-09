@@ -1,5 +1,5 @@
 """
-Aletheia - AI舆情谎言鉴定系统
+Aletheia - AI舆情遥言鉴定系统
 Gradio版本主入口文件
 部署到魔搭社区创空间
 """
