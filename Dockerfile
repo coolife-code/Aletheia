@@ -15,6 +15,7 @@ COPY frontend/next.config.ts ./
 COPY frontend/postcss.config.mjs ./
 COPY frontend/components.json ./
 COPY frontend/eslint.config.mjs ./
+COPY frontend/next-env.d.ts ./
 
 # 安装依赖
 RUN npm ci
