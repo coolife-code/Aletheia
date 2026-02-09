@@ -1,61 +1,40 @@
 {
-  "name": "Aletheia",
-  "version": "1.0.0",
-  "description": "AI舆情谎言鉴定系统 - 基于多Agent协作的智能事实核查工具",
-  "type": "gradio",
-  "entry_point": "app.py",
-  "python_version": "3.10",
-  "requirements": "requirements.txt",
+  "sdk_type": "gradio",
+  "resource_configuration": {
+    "cpu": 2,
+    "memory": 4,
+    "gpu": 0
+  },
   "environment_variables": [
     {
       "name": "OPENAI_API_KEY",
-      "description": "阿里百炼 API密钥 (用于DeepSeek-V3.2模型)",
-      "required": true
+      "value": "",
+      "description": "阿里百炼 API密钥 (用于DeepSeek-V3.2模型)"
     },
     {
       "name": "OPENAI_BASE_URL",
-      "description": "阿里百炼 API基础URL",
-      "required": false,
-      "default": "https://dashscope.aliyuncs.com/compatible-mode/v1"
+      "value": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "description": "阿里百炼 API基础URL"
     },
     {
       "name": "OPENAI_MODEL",
-      "description": "使用的模型名称",
-      "required": false,
-      "default": "deepseek-v3.2"
+      "value": "deepseek-v3.2",
+      "description": "使用的模型名称"
     },
     {
       "name": "LLM_PROVIDER",
-      "description": "LLM提供商 (固定为openai，使用阿里百炼兼容接口)",
-      "required": false,
-      "default": "openai"
+      "value": "openai",
+      "description": "LLM提供商 (固定为openai，使用阿里百炼兼容接口)"
     },
     {
       "name": "VERDICT_LLM_MODEL",
-      "description": "Verdict Agent专用模型",
-      "required": false,
-      "default": "deepseek-v3.2"
+      "value": "deepseek-v3.2",
+      "description": "Verdict Agent专用模型"
     },
     {
       "name": "VERDICT_LLM_TEMPERATURE",
-      "description": "Verdict Agent温度参数",
-      "required": false,
-      "default": "0.1"
+      "value": "0.1",
+      "description": "Verdict Agent温度参数"
     }
-  ],
-  "resources": {
-    "cpu": 2,
-    "memory": "4Gi",
-    "disk": "10Gi"
-  },
-  "network": {
-    "port": 7860,
-    "protocol": "http"
-  },
-  "health_check": {
-    "path": "/",
-    "interval": 30,
-    "timeout": 10,
-    "retries": 3
-  }
+  ]
 }
