@@ -1,97 +1,14 @@
-# ============================================
-# ModelScope Space 配置文件
-# Aletheia - AI 舆情谎言鉴定系统
-# ============================================
-
-# 空间基本信息
 name: aletheia
 version: 1.0.0
-author: coolife-code
 description: AI 舆情谎言鉴定系统 - 基于多智能体的事实核查平台
+author: coolife-code
 license: MIT
-
-# 空间类型
-# - gradio: Gradio 应用
-# - streamlit: Streamlit 应用
-# - static: 静态网站
-# - custom: 自定义 Docker 应用
-type: custom
-
-# Docker 配置
-docker:
-  # 构建上下文路径
-  context: .
-  # Dockerfile 路径
-  dockerfile: Dockerfile
-  # 暴露的端口
-  ports:
-    - 7860
-
-# 环境变量（这些变量会在空间中暴露给用户配置）
-env:
-  # LLM 配置
-  - name: OPENAI_API_KEY
-    description: 阿里百炼 API Key (用于 DeepSeek 模型)
-    required: true
-    secret: true
-  
-  - name: OPENAI_BASE_URL
-    description: OpenAI 兼容 API 基础 URL
-    default: https://dashscope.aliyuncs.com/compatible-mode/v1
-    required: false
-  
-  - name: OPENAI_MODEL
-    description: 使用的模型名称
-    default: deepseek-v3.2
-    required: false
-  
-  # 搜索配置（可选）
-  - name: SERPAPI_KEY
-    description: SerpAPI Key (可选，用于增强搜索)
-    required: false
-    secret: true
-  
-  - name: NEWSAPI_KEY
-    description: NewsAPI Key (可选，用于新闻搜索)
-    required: false
-    secret: true
-  
-  # 应用配置
-  - name: ENVIRONMENT
-    description: 运行环境
-    default: production
-    required: false
-  
-  - name: DEBUG
-    description: 调试模式
-    default: "false"
-    required: false
-
-# 资源需求
-resources:
-  # CPU 核心数
-  cpu: 2
-  # 内存 (MB)
-  memory: 4096
-  # GPU 配置（不需要 GPU）
-  gpu: null
-
-# 健康检查
-health_check:
-  # 健康检查路径
-  path: /
-  # 健康检查端口
-  port: 7860
-  # 初始延迟（秒）
-  initial_delay: 30
-  # 检查间隔（秒）
-  interval: 10
-  # 超时时间（秒）
-  timeout: 5
-  # 失败重试次数
-  retries: 3
-
-# 标签
+sdk_type: docker
+port: 7860
+resource_configuration: platform/2v-cpu-16g-mem
+visibility: public
+cover: https://github.com/coolife-code/aletheia/raw/main/assets/cover.png
+icon: 🔍
 tags:
   - ai
   - fact-checking
@@ -99,14 +16,39 @@ tags:
   - multi-agent
   - 舆情分析
   - 事实核查
-
-# 封面图片
-cover: https://github.com/coolife-code/aletheia/raw/main/assets/cover.png
-
-# 图标
-icon: 🔍
-
-# 访问权限
-# - public: 公开访问
-# - private: 私有访问
-visibility: public
+env:
+  - name: OPENAI_API_KEY
+    description: 阿里百炼 API Key (用于 DeepSeek 模型)
+    required: true
+    secret: true
+  - name: OPENAI_BASE_URL
+    description: OpenAI 兼容 API 基础 URL
+    default: https://dashscope.aliyuncs.com/compatible-mode/v1
+    required: false
+    secret: false
+  - name: OPENAI_MODEL
+    description: 使用的模型名称
+    default: deepseek-v3.2
+    required: false
+    secret: false
+  - name: SERPAPI_KEY
+    description: SerpAPI Key (可选，用于增强搜索)
+    required: false
+    secret: true
+  - name: NEWSAPI_KEY
+    description: NewsAPI Key (可选，用于新闻搜索)
+    required: false
+    secret: true
+  - name: ENVIRONMENT
+    description: 运行环境
+    default: production
+    required: false
+    secret: false
+  - name: DEBUG
+    description: 调试模式
+    default: "false"
+    required: false
+    secret: false
+docker:
+  context: .
+  dockerfile: Dockerfile
