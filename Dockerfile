@@ -8,6 +8,9 @@ FROM node:20-slim AS frontend-builder
 
 WORKDIR /app
 
+# 复制版本文件（用于强制重新构建）
+COPY VERSION ./
+
 # 复制整个前端目录（避免分步复制的缓存问题）
 COPY frontend/ ./
 

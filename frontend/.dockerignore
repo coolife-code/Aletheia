@@ -1,0 +1,6 @@
+# 前端 Docker 忽略文件
+node_modules
+.next
+dist
+out
+.git

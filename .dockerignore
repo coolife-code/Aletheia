@@ -1,0 +1,53 @@
+# ============================================
+# Docker 构建忽略文件
+# ============================================
+
+# Git
+.git
+.gitignore
+
+# 文档
+*.md
+DEPLOY.md
+API_CONFIG.md
+ARCHITECTURE.md
+FRONTEND.md
+AGENT.md
+
+# 前端
+frontend/node_modules
+frontend/.next
+frontend/dist
+frontend/out
+frontend/.gitignore
+frontend/README.md
+frontend/eslint.config.mjs
+
+# 后端
+backend/__pycache__
+backend/**/*.pyc
+backend/.pytest_cache
+backend/.mypy_cache
+backend/venv
+backend/.env
+backend/*.db
+backend/*.sqlite3
+
+# IDE
+.vscode
+.idea
+.trae
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 测试文件
+test_*.py
+*_test.py
+
+# 其他
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
