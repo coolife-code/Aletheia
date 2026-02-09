@@ -3,29 +3,16 @@
 # 魔搭社区空间部署 Dockerfile
 # ============================================
 
+# 前端构建阶段
 FROM node:20-slim AS frontend-builder
 
-# 设置工作目录
 WORKDIR /app
 
-# 先复制配置文件
-COPY frontend/package*.json ./
-COPY frontend/tsconfig.json ./
-COPY frontend/next.config.ts ./
-COPY frontend/postcss.config.mjs ./
-COPY frontend/components.json ./
-COPY frontend/eslint.config.mjs ./
-COPY frontend/next-env.d.ts ./
+# 复制整个前端目录
+COPY frontend/ ./
 
-# 安装依赖
-RUN npm ci
-
-# 复制源码
-COPY frontend/src ./src
-COPY frontend/public ./public
-
-# 构建前端
-RUN npm run build
+# 安装依赖并构建
+RUN npm ci && npm run build
 
 # ============================================
 # 后端服务阶段
@@ -37,10 +24,9 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# 设置工作目录
 WORKDIR /app
 
-# 复制后端依赖文件
+# 复制后端依赖
 COPY backend/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -54,13 +40,11 @@ COPY --from=frontend-builder /app/dist ./frontend/dist
 COPY start.sh ./
 RUN chmod +x start.sh
 
-# 设置环境变量
+# 环境变量
 ENV PYTHONUNBUFFERED=1
 ENV PORT=7860
 ENV BACKEND_PORT=8000
 
-# 暴露端口
 EXPOSE 7860
 
-# 启动命令
 CMD ["./start.sh"]
