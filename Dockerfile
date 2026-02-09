@@ -6,27 +6,13 @@
 FROM node:20-slim AS frontend-builder
 
 # 设置工作目录
-WORKDIR /app/frontend
+WORKDIR /app
 
-# 复制前端依赖文件
-COPY frontend/package*.json ./
-COPY frontend/tsconfig.json ./
+# 复制前端所有文件
+COPY frontend/ ./
 
 # 安装依赖
 RUN npm ci
-
-# 复制前端源码
-COPY frontend/src ./src
-COPY frontend/public ./public
-COPY frontend/next.config.ts ./
-COPY frontend/postcss.config.mjs ./
-COPY frontend/components.json ./
-COPY frontend/.gitignore ./
-COPY frontend/README.md ./
-COPY frontend/eslint.config.mjs ./
-
-# 创建必要的目录结构
-RUN mkdir -p src/lib src/components/ui
 
 # 构建前端
 RUN npm run build
@@ -39,8 +25,6 @@ FROM python:3.11-slim
 # 安装系统依赖
 RUN apt-get update && apt-get install -y \
     curl \
-    nodejs \
-    npm \
     && rm -rf /var/lib/apt/lists/*
 
 # 设置工作目录
@@ -54,7 +38,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ ./backend/
 
 # 复制前端构建产物
-COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
+COPY --from=frontend-builder /app/dist ./frontend/dist
 
 # 复制启动脚本
 COPY start.sh ./
