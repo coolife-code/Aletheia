@@ -8,11 +8,20 @@ FROM node:20-slim AS frontend-builder
 # 设置工作目录
 WORKDIR /app
 
-# 复制前端所有文件
-COPY frontend/ ./
+# 先复制配置文件
+COPY frontend/package*.json ./
+COPY frontend/tsconfig.json ./
+COPY frontend/next.config.ts ./
+COPY frontend/postcss.config.mjs ./
+COPY frontend/components.json ./
+COPY frontend/eslint.config.mjs ./
 
 # 安装依赖
 RUN npm ci
+
+# 复制源码
+COPY frontend/src ./src
+COPY frontend/public ./public
 
 # 构建前端
 RUN npm run build
