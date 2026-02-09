@@ -64,3 +64,10 @@ if os.getenv("ANTHROPIC_API_KEY"):
     settings.ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 if os.getenv("LLM_PROVIDER"):
     settings.LLM_PROVIDER = os.getenv("LLM_PROVIDER")
+if os.getenv("VERDICT_LLM_MODEL"):
+    settings.VERDICT_LLM_MODEL = os.getenv("VERDICT_LLM_MODEL")
+if os.getenv("VERDICT_LLM_TEMPERATURE"):
+    try:
+        settings.VERDICT_LLM_TEMPERATURE = float(os.getenv("VERDICT_LLM_TEMPERATURE"))
+    except ValueError:
+        pass
