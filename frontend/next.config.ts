@@ -18,13 +18,11 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  // 配置路径别名
-  webpack: (config) => {
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      '@': require('path').resolve(__dirname, 'src'),
-    };
-    return config;
+  // 配置 Turbopack 路径别名
+  turbopack: {
+    resolveAlias: {
+      '@/*': './src/*',
+    },
   },
 };
 
