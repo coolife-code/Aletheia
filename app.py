@@ -1,289 +1,351 @@
 """
-Aletheia - AI舆情遥言鉴定系统
-Gradio版本主入口文件
-部署到魔搭社区创空间
+Aletheia Gradio前端应用 - 简化稳定版
 """
-
-import os
-import sys
 import asyncio
-import json
-from typing import AsyncGenerator
-
-# 将backend添加到Python路径（确保在导入gradio之前）
-backend_path = os.path.join(os.path.dirname(__file__), 'backend')
-if backend_path not in sys.path:
-    sys.path.insert(0, backend_path)
-
-# 使用绝对导入，避免与系统app包冲突
-from aletheia_backend.agents.parser import ParserAgent
-from aletheia_backend.agents.search import SearchAgent
-from aletheia_backend.agents.verdict import VerdictAgent
-
 import gradio as gr
+from openai import AsyncOpenAI
 
-# 初始化Agents
-parser_agent = ParserAgent()
-search_agent = SearchAgent()
-verdict_agent = VerdictAgent()
-
-
-def get_conclusion_emoji(conclusion: str) -> str:
-    """根据结论类型返回对应的emoji"""
-    return {
-        "true": "✅",
-        "false": "❌",
-        "uncertain": "⚠️",
-        "unverifiable": "❓",
-        "partially_true": "🟨",
-        "misleading": "🟧"
-    }.get(conclusion, "❓")
+from aletheia.system import AletheiaSystem
+from aletheia.core.config import settings
 
 
-def get_conclusion_label(conclusion: str) -> str:
-    """根据结论类型返回中文标签"""
-    return {
-        "true": "真实",
-        "false": "虚假",
-        "uncertain": "存疑",
-        "unverifiable": "无法核实",
-        "partially_true": "部分真实",
-        "misleading": "误导性"
-    }.get(conclusion, "未知")
+# 初始化
+llm_client = AsyncOpenAI(
+    api_key=settings.OPENAI_API_KEY or "your-api-key",
+    base_url=settings.OPENAI_BASE_URL
+)
+aletheia = AletheiaSystem(llm_client)
+
+# 角度中文名映射
+ANGLE_NAMES = {
+    "CoreFactChecker": "核心事实核查",
+    "TimelineBuilder": "时间线构建",
+    "StakeholderMapper": "利益相关方分析",
+    "SentimentAnalyzer": "舆论情绪分析",
+    "DataVerifier": "数据验证",
+    "SourceCredibility": "信源可信度",
+    "ContextAnalyzer": "背景语境分析",
+    "TechnicalAnalyzer": "技术细节分析",
+    "LegalAnalyzer": "法律合规分析",
+    "PsychologicalAnalyzer": "心理动机分析",
+    "EconomicAnalyzer": "经济影响分析",
+    "MediaCoverage": "媒体报道分析",
+    "SocialImpact": "社会影响分析",
+    "CausalityAnalyzer": "因果逻辑分析",
+    "ComparisonAnalyzer": "对比参照分析"
+}
 
 
-async def verify_content_stream(content: str):
-    """
-    流式鉴定舆情内容，实时返回每个Agent的推理过程
-    """
-    if not content or not content.strip():
-        yield "请输入需要鉴定的舆情内容", "", "", ""
+async def typewriter_effect(text: str, chunk_size: int = 4, delay: float = 0.02):
+    """生成打字机效果的分块"""
+    if not text:
+        yield ""
         return
-
-    reasoning_text = ""
-    result_text = ""
-    evidence_text = ""
-
-    try:
-        # ==================== Step 1: Parser Agent ====================
-        reasoning_text += "## 🔍 Parser Agent - 问题分析\n\n"
-        yield reasoning_text, result_text, evidence_text, "正在分析问题..."
-
-        parser_result_data = None
-        async for parser_event in parser_agent.parse_stream(content):
-            event_type = parser_event.get("type")
-            step = parser_event.get("step", "")
-            event_content = parser_event.get("content", "")
-
-            if event_type == "reasoning":
-                reasoning_text += f"**{step}**: {event_content}\n\n"
-                yield reasoning_text, result_text, evidence_text, f"Parser: {step}..."
-            elif event_type == "result":
-                parser_result_data = parser_event.get("data")
-
-        # 检查是否需要澄清
-        if parser_result_data and parser_result_data.get("needs_clarification"):
-            clarification = parser_result_data.get("clarification_prompt", "请提供更多具体信息")
-            result_text = f"## ⚠️ 需要补充信息\n\n{clarification}"
-            yield reasoning_text, result_text, evidence_text, "需要补充信息"
-            return
-
-        if not parser_result_data:
-            result_text = "## ❌ 解析失败\n\n无法解析输入内容，请重试。"
-            yield reasoning_text, result_text, evidence_text, "解析失败"
-            return
-
-        # ==================== Step 2: Search Agent ====================
-        reasoning_text += "\n---\n\n## 🔎 Search Agent - 深度搜索\n\n"
-        yield reasoning_text, result_text, evidence_text, "正在搜索相关信息..."
-
-        search_result_data = None
-        async for search_event in search_agent.search_stream(parser_result_data, content):
-            event_type = search_event.get("type")
-            step = search_event.get("step", "")
-            event_content = search_event.get("content", "")
-
-            if event_type == "reasoning":
-                reasoning_text += f"**{step}**: {event_content}\n\n"
-                yield reasoning_text, result_text, evidence_text, f"Search: {step}..."
-            elif event_type == "result":
-                search_result_data = search_event.get("data")
-
-        if not search_result_data:
-            result_text = "## ❌ 搜索失败\n\n无法获取相关信息，请重试。"
-            yield reasoning_text, result_text, evidence_text, "搜索失败"
-            return
-
-        # ==================== Step 3: Verdict Agent ====================
-        reasoning_text += "\n---\n\n## 🎯 Verdict Agent - 多维度鉴定\n\n"
-        yield reasoning_text, result_text, evidence_text, "正在进行多维度鉴定..."
-
-        verdict_result_data = None
-        async for verdict_event in verdict_agent.verdict_stream(search_result_data, content):
-            event_type = verdict_event.get("type")
-            step = verdict_event.get("step", "")
-            event_content = verdict_event.get("content", "")
-
-            if event_type == "reasoning":
-                reasoning_text += f"**{step}**: {event_content}\n\n"
-                yield reasoning_text, result_text, evidence_text, f"Verdict: {step}..."
-            elif event_type == "result":
-                verdict_result_data = verdict_event.get("data")
-
-        # ==================== 最终结果 ====================
-        if verdict_result_data:
-            conclusion = verdict_result_data.get("conclusion", "uncertain")
-            confidence = verdict_result_data.get("confidence_score", 0.5)
-            summary = verdict_result_data.get("conclusion_summary", "")
-
-            emoji = get_conclusion_emoji(conclusion)
-            label = get_conclusion_label(conclusion)
-
-            # 构建结果展示
-            result_text = f"""## {emoji} 鉴定结论: {label}
-
-**置信度**: {confidence:.0%}
-
-### 结论摘要
-{summary}
-
-### 多维度分析
-"""
-
-            # 添加多维度分析
-            dimensional = verdict_result_data.get("dimensional_analysis", {})
-            for dim_name, dim_data in dimensional.items():
-                dim_labels = {
-                    "factual": "📊 事实维度",
-                    "contextual": "📋 背景维度",
-                    "motivational": "💭 动机维度",
-                    "impact": "🌟 影响维度"
-                }
-                label_text = dim_labels.get(dim_name, dim_name)
-                analysis = dim_data.get("analysis", "")[:200]
-                conf = dim_data.get("confidence", 0.5)
-                result_text += f"\n**{label_text}**: {analysis} (置信度: {conf:.0%})\n"
-
-            # 添加发现分类
-            findings = verdict_result_data.get("findings", {})
-            result_text += f"""
-### 发现分类
-- ✅ 已验证: {len(findings.get('verified_claims', []))} 项
-- ❌ 已证伪: {len(findings.get('refuted_claims', []))} 项
-- ⚠️ 需 nuanced 理解: {len(findings.get('nuanced_claims', []))} 项
-- ❓ 不确定: {len(findings.get('uncertain_claims', []))} 项
-"""
-
-            # 构建证据列表
-            all_sources = search_result_data.get("all_sources", [])
-            evidence_text = f"## 📚 证据列表 (共 {len(all_sources)} 个信源)\n\n"
-
-            # 关键信源
-            key_sources = [s for s in all_sources if s.get("is_key_source", False)]
-            if key_sources:
-                evidence_text += "### 🔑 关键信源\n\n"
-                for i, source in enumerate(key_sources[:5], 1):
-                    credibility = source.get("source_credibility", "medium")
-                    cred_emoji = "🟢" if credibility == "high" else "🟡" if credibility == "medium" else "🔴"
-                    evidence_text += f"**{i}. {source.get('title', '未知标题')}**\n"
-                    evidence_text += f"- 来源: {source.get('source_domain', '未知')}\n"
-                    evidence_text += f"- 可信度: {cred_emoji} {credibility}\n"
-                    evidence_text += f"- 关键信息: {source.get('key_insight', '')[:100]}...\n\n"
-
-            # 普通信源
-            regular_sources = [s for s in all_sources if not s.get("is_key_source", False)]
-            if regular_sources:
-                evidence_text += "### 📄 其他信源\n\n"
-                for i, source in enumerate(regular_sources[:5], 1):
-                    credibility = source.get("source_credibility", "medium")
-                    cred_emoji = "🟢" if credibility == "high" else "🟡" if credibility == "medium" else "🔴"
-                    evidence_text += f"**{i}. {source.get('title', '未知标题')}** ({cred_emoji} {credibility})\n"
-                    evidence_text += f"   来源: {source.get('source_domain', '未知')}\n\n"
-
-            yield reasoning_text, result_text, evidence_text, "鉴定完成"
-        else:
-            result_text = "## ❌ 鉴定未完成\n\n鉴定过程未能完成，请重试。"
-            yield reasoning_text, result_text, evidence_text, "鉴定失败"
-
-    except Exception as e:
-        error_msg = f"## ❌ 错误\n\n鉴定过程出错: {str(e)}"
-        yield reasoning_text, error_msg, evidence_text, "出错"
+    for i in range(0, len(text), chunk_size):
+        yield text[:i + chunk_size]
+        await asyncio.sleep(delay)
 
 
-# 创建Gradio界面
 def create_interface():
-    with gr.Blocks(theme=gr.themes.Soft(), title="Aletheia - AI舆情谎言鉴定系统") as demo:
-        # 标题区域
-        gr.Markdown("""
-        # 🔍 Aletheia - AI舆情谎言鉴定系统
-
-        基于多Agent协作的智能舆情真实性鉴定系统，通过Parser、Search、Verdict三个Agent的深度协作，
-        从多维度分析问题，为您提供客观、可信的鉴定结果。
-
-        **使用说明**: 在下方输入框中输入您想要鉴定的舆情内容，点击"开始鉴定"按钮，系统将自动分析并返回鉴定结果。
-        """)
-
+    """创建Gradio界面"""
+    
+    with gr.Blocks(title="Aletheia - 舆情鉴别") as app:
+        gr.Markdown("# 🔍 Aletheia 舆情鉴别系统")
+        
+        # ========== 输入区 ==========
         with gr.Row():
-            with gr.Column(scale=1):
-                # 输入区域
-                input_text = gr.Textbox(
-                    label="输入舆情内容",
-                    placeholder="请输入您想要鉴定的舆情内容，例如：\"某明星宣布退出娱乐圈\"...",
-                    lines=5,
-                    max_lines=10
-                )
-                submit_btn = gr.Button("🚀 开始鉴定", variant="primary", size="lg")
-                status_text = gr.Textbox(label="当前状态", value="就绪", interactive=False)
-
-            with gr.Column(scale=2):
-                # 结果展示区域 - 使用标签页
-                with gr.Tabs():
-                    with gr.TabItem("📝 推理过程"):
-                        reasoning_output = gr.Markdown(
-                            value='*点击"开始鉴定"后，这里将显示详细的推理过程...*'
-                        )
-
-                    with gr.TabItem("🎯 鉴定结果"):
-                        result_output = gr.Markdown(
-                            value="*鉴定结果将在这里显示...*"
-                        )
-
-                    with gr.TabItem("📚 证据列表"):
-                        evidence_output = gr.Markdown(
-                            value="*相关证据将在这里显示...*"
-                        )
-
-        # 示例
-        gr.Markdown("### 💡 示例")
-        examples = [
-            ["某知名科技公司CEO宣布辞职，原因是个人健康原因"],
-            ["最新研究表明，每天喝一杯咖啡可以延长寿命5年"],
-            ["某城市即将实施新的交通管制措施，限制外地车辆进入"]
-        ]
-        gr.Examples(examples=examples, inputs=input_text)
-
-        # 绑定事件
-        submit_btn.click(
-            fn=verify_content_stream,
-            inputs=input_text,
-            outputs=[reasoning_output, result_output, evidence_output, status_text]
+            input_text = gr.Textbox(
+                label="待鉴别内容",
+                placeholder="输入新闻、传言或舆情内容...",
+                lines=5,
+                scale=4
+            )
+            analyze_btn = gr.Button("开始分析", variant="primary", scale=1)
+        
+        # ========== 分析方向 ==========
+        gr.Markdown("---")
+        gr.Markdown("## 📍 分析方向")
+        
+        direction_text = gr.Textbox(
+            label="推理过程",
+            interactive=False,
+            lines=8,
+            value="",
+            autoscroll=False  # 防止自动滚动
         )
+        with gr.Row():
+            event_type = gr.Textbox(label="事件类型", interactive=False)
+            activated_angles = gr.Textbox(label="激活角度", interactive=False)
+        
+        # ========== 多角度调查 ==========
+        gr.Markdown("---")
+        gr.Markdown("## 🔎 多角度调查")
+        
+        # 角度选择下拉框
+        angle_selector = gr.Dropdown(
+            label="选择角度查看",
+            choices=[],
+            value=None,
+            interactive=True
+        )
+        
+        angle_status = gr.Textbox(label="角度状态", interactive=False)
+        angle_content = gr.Textbox(
+            label="分析报告",
+            interactive=False,
+            lines=15,
+            value="",
+            autoscroll=False  # 防止自动滚动
+        )
+        
+        # 隐藏存储角度数据
+        angle_data_store = gr.JSON(visible=False)
+        
+        # ========== 最终结论 ==========
+        gr.Markdown("---")
+        gr.Markdown("## 🎯 最终结论")
+        
+        verdict_badge = gr.HTML()
+        with gr.Row():
+            verdict_conclusion = gr.Textbox(label="结论", interactive=False)
+            verdict_confidence = gr.Textbox(label="置信度", interactive=False)
+        verdict_summary = gr.Textbox(label="结论摘要", interactive=False, lines=2)
+        verdict_detail = gr.Textbox(
+            label="详细研判",
+            interactive=False,
+            lines=10,
+            value="",
+            autoscroll=False  # 防止自动滚动
+        )
+        
+        # ========== 信源列表 ==========
+        gr.Markdown("---")
+        gr.Markdown("## 📚 参考信源")
+        sources_html = gr.HTML()
+        
+        # ========== 处理函数 ==========
+        async def process(content):
+            print(f"\n[DEBUG] 开始分析: {content[:50]}...")
+            
+            if not content or not content.strip():
+                yield {
+                    direction_text: "请输入内容",
+                    event_type: "",
+                    activated_angles: "",
+                    angle_selector: gr.update(choices=[]),
+                    angle_status: "",
+                    angle_content: "",
+                    angle_data_store: {},
+                    verdict_badge: "",
+                    verdict_conclusion: "",
+                    verdict_confidence: "",
+                    verdict_summary: "",
+                    verdict_detail: "",
+                    sources_html: ""
+                }
+                return
+            
+            # 1. 方向判定
+            print("[DEBUG] 方向判定...")
+            try:
+                direction = await aletheia.direction_agent.analyze(content)
+                reasoning = direction.reasoning or "分析完成"
+                
+                # 打字机效果
+                async for partial in typewriter_effect(reasoning):
+                    yield {
+                        direction_text: partial,
+                        event_type: direction.event_type,
+                        activated_angles: ", ".join(direction.activated_angles),
+                        angle_selector: gr.update(choices=[]),
+                        angle_status: "分析中...",
+                        angle_content: "",
+                        angle_data_store: {},
+                        verdict_badge: "",
+                        verdict_conclusion: "",
+                        verdict_confidence: "",
+                        verdict_summary: "",
+                        verdict_detail: "",
+                        sources_html: ""
+                    }
+                
+                # 2. 角度分析
+                print(f"[DEBUG] 分析 {len(direction.activated_angles)} 个角度...")
+                angle_results = {}
+                all_sources = []
+                
+                for idx, angle_name in enumerate(direction.activated_angles):
+                    print(f"[DEBUG] 角度 {idx+1}/{len(direction.activated_angles)}: {angle_name}")
+                    
+                    agent = aletheia.angle_agents.get(angle_name)
+                    if not agent:
+                        continue
+                    
+                    try:
+                        report = await agent.investigate(content)
+                        angle_results[angle_name] = {
+                            "name": ANGLE_NAMES.get(angle_name, angle_name),
+                            "report": report.report or "暂无报告",
+                            "confidence": report.confidence,
+                            "sources": report.key_sources
+                        }
+                        all_sources.extend(report.key_sources)
+                        
+                        # 更新下拉框选项
+                        choices = [f"{v['name']} (置信度: {v['confidence']:.0%})" for v in angle_results.values()]
+                        
+                        yield {
+                            direction_text: reasoning,
+                            event_type: direction.event_type,
+                            activated_angles: ", ".join(direction.activated_angles),
+                            angle_selector: gr.update(choices=choices, value=choices[-1] if choices else None),
+                            angle_status: f"✓ {ANGLE_NAMES.get(angle_name, angle_name)} 完成 (置信度: {report.confidence:.0%})",
+                            angle_content: report.report or "暂无报告",
+                            angle_data_store: angle_results,
+                            verdict_badge: "",
+                            verdict_conclusion: "",
+                            verdict_confidence: "",
+                            verdict_summary: "",
+                            verdict_detail: "",
+                            sources_html: ""
+                        }
+                        
+                    except Exception as e:
+                        print(f"[ERROR] 角度失败 {angle_name}: {e}")
+                
+                # 3. 最终结论
+                print("[DEBUG] 综合研判...")
+                
+                angle_reports = [
+                    type('obj', (object,), {
+                        'angle_name': k,
+                        'report': v['report'],
+                        'confidence': v['confidence'],
+                        'key_sources': v['sources']
+                    })() for k, v in angle_results.items()
+                ]
+                
+                judgment = await aletheia.judgment_agent.judge(content, angle_reports)
+                
+                # 结论颜色
+                conclusion = judgment.conclusion
+                if "真实" in conclusion or "属实" in conclusion:
+                    color = "#4CAF50"
+                elif "虚假" in conclusion or "不实" in conclusion:
+                    color = "#f44336"
+                else:
+                    color = "#FF9800"
+                
+                badge = f'<div style="background:{color};color:white;padding:15px;border-radius:8px;font-size:22px;font-weight:bold;text-align:center;">{conclusion}</div>'
+                
+                # 打字机效果输出结论
+                full_text = f"{judgment.summary}\n\n{judgment.detailed_judgment}"
+                async for partial in typewriter_effect(full_text):
+                    yield {
+                        direction_text: reasoning,
+                        event_type: direction.event_type,
+                        activated_angles: ", ".join(direction.activated_angles),
+                        angle_selector: gr.update(choices=[f"{v['name']} (置信度: {v['confidence']:.0%})" for v in angle_results.values()]),
+                        angle_status: f"✓ 所有角度分析完成",
+                        angle_content: list(angle_results.values())[-1]["report"] if angle_results else "",
+                        angle_data_store: angle_results,
+                        verdict_badge: badge,
+                        verdict_conclusion: conclusion,
+                        verdict_confidence: f"{judgment.confidence:.0%}",
+                        verdict_summary: judgment.summary,
+                        verdict_detail: partial,
+                        sources_html: ""
+                    }
+                
+                # 4. 信源
+                if all_sources:
+                    html = "<div style='display:flex;flex-wrap:wrap;gap:10px;'>"
+                    for src in all_sources[:10]:
+                        name = src.get("name", "未知")
+                        cred = src.get("credibility", "未知")
+                        url = src.get("url", "#")
+                        color = "#4CAF50" if "高" in cred else "#FF9800" if "中" in cred else "#f44336"
+                        html += f"""
+                        <div style="border:1px solid #ddd;border-radius:8px;padding:10px;min-width:200px;background:#fafafa;">
+                            <div style="font-weight:bold;">{name}</div>
+                            <div style="font-size:12px;color:#666;">可信度: <span style="color:{color};font-weight:bold;">{cred}</span></div>
+                            <div style="font-size:11px;margin-top:5px;"><a href="{url}" target="_blank" style="color:#2196F3;">{url[:40]}...</a></div>
+                        </div>
+                        """
+                    html += "</div>"
+                    
+                    yield {
+                        direction_text: reasoning,
+                        event_type: direction.event_type,
+                        activated_angles: ", ".join(direction.activated_angles),
+                        angle_selector: gr.update(choices=[f"{v['name']} (置信度: {v['confidence']:.0%})" for v in angle_results.values()]),
+                        angle_status: "✓ 所有角度分析完成",
+                        angle_content: list(angle_results.values())[-1]["report"] if angle_results else "",
+                        angle_data_store: angle_results,
+                        verdict_badge: badge,
+                        verdict_conclusion: conclusion,
+                        verdict_confidence: f"{judgment.confidence:.0%}",
+                        verdict_summary: judgment.summary,
+                        verdict_detail: full_text,
+                        sources_html: html
+                    }
+                
+                print("[DEBUG] 分析完成")
+                
+            except Exception as e:
+                import traceback
+                error_msg = f"错误: {str(e)}"
+                print(f"[ERROR] {error_msg}\n{traceback.format_exc()}")
+                yield {
+                    direction_text: error_msg,
+                    event_type: "",
+                    activated_angles: "",
+                    angle_selector: gr.update(choices=[]),
+                    angle_status: "",
+                    angle_content: "",
+                    angle_data_store: {},
+                    verdict_badge: "",
+                    verdict_conclusion: "",
+                    verdict_confidence: "",
+                    verdict_summary: "",
+                    verdict_detail: "",
+                    sources_html: ""
+                }
+        
+        # 角度选择切换
+        def on_angle_select(selected, angle_data):
+            if not selected or not angle_data:
+                return "", ""
+            
+            # 从选择文本中提取角度名
+            for key, value in angle_data.items():
+                if value['name'] in selected:
+                    return f"✓ {value['name']} 完成 (置信度: {value['confidence']:.0%})", value['report']
+            
+            return "", ""
+        
+        angle_selector.change(
+            fn=on_angle_select,
+            inputs=[angle_selector, angle_data_store],
+            outputs=[angle_status, angle_content]
+        )
+        
+        # 绑定分析按钮
+        analyze_btn.click(
+            fn=process,
+            inputs=input_text,
+            outputs=[
+                direction_text, event_type, activated_angles,
+                angle_selector, angle_status, angle_content, angle_data_store,
+                verdict_badge, verdict_conclusion, verdict_confidence,
+                verdict_summary, verdict_detail, sources_html
+            ]
+        )
+    
+    return app
 
-        gr.Markdown("""
-        ---
-        **技术说明**: 本系统使用DeepSeek联网搜索功能获取实时信息，通过多Agent协作进行深度分析，
-        包括问题解析、证据搜索、多维度鉴定三个核心步骤。
-        """)
 
-    return demo
-
-
-# 启动应用
 if __name__ == "__main__":
-    demo = create_interface()
-    demo.launch(
-        server_name="0.0.0.0",
-        server_port=7860,
-        share=False,
-        show_error=True
-    )
+    print("[DEBUG] 启动 Aletheia 系统...")
+    app = create_interface()
+    app.launch(server_name="0.0.0.0", server_port=7861, share=False)
