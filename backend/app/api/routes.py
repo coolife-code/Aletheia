@@ -115,11 +115,12 @@ async def verify_content_stream(request: VerifyRequest):
             
             # 检查是否需要澄清
             if parser_result_data and parser_result_data.get("needs_clarification"):
-                yield f"data: {json.dumps({
+                clarification_response = {
                     'type': 'complete',
                     'needs_clarification': True,
                     'clarification_prompt': parser_result_data.get('clarification_prompt')
-                }, ensure_ascii=False)}\n\n"
+                }
+                yield f"data: {json.dumps(clarification_response, ensure_ascii=False)}\n\n"
                 return
             
             if not parser_result_data:
