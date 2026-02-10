@@ -1,10 +1,9 @@
-# Aletheia - AI 舆情谎言鉴定系统
+# Aletheia - AI 舆情谣言鉴别系统
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Next.js-16.1.6-black?style=flat-square&logo=next.js" />
-  <img src="https://img.shields.io/badge/FastAPI-0.115.0-009688?style=flat-square&logo=fastapi" />
   <img src="https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python" />
-  <img src="https://img.shields.io/badge/TypeScript-5.0+-3178C6?style=flat-square&logo=typescript" />
+  <img src="https://img.shields.io/badge/Gradio-5.0+-FF6B6B?style=flat-square" />
+  <img src="https://img.shields.io/badge/OpenAI-API-412991?style=flat-square&logo=openai" />
 </p>
 
 <p align="center">
@@ -15,14 +14,16 @@
 
 ## 🎯 项目简介
 
-**Aletheia**（希腊语"真理"）是一个 AI 驱动的舆情谎言鉴定系统，通过多 Agent 协作架构，对用户输入的舆情内容进行事实核查、可信度评分和证据溯源。
+**Aletheia**（希腊语"真理"）是一个 AI 驱动的舆情谣言鉴别系统，通过创新的多 Agent 协作架构，对用户输入的舆情内容进行多角度事实核查、可信度评分和证据溯源。
 
 ### 核心能力
 
-- ✅ **事实核查** - 自动验证舆情内容的真实性
+- ✅ **智能方向判定** - 自动识别事件类型，动态激活相关分析角度
+- 🔍 **多角度调查** - 15个专业角度 Agent 并行分析（事实核查、时间线、利益相关方等）
 - 📊 **可信度评分** - 0-100% 的可信度量化评估
-- 🔍 **证据溯源** - 提供权威信源和完整证据链
-- 🧠 **智能推理** - 展示 AI 的推理过程和判断依据
+- 🔗 **证据溯源** - 提供权威信源和完整证据链
+- 🧠 **可解释推理** - 展示 AI 的完整推理过程和判断依据
+- ✨ **流式输出** - 打字机效果实时展示分析过程
 
 ---
 
@@ -30,39 +31,33 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      Web Frontend                            │
-│              Next.js 16 + Tailwind CSS + shadcn/ui          │
+│                      Gradio Frontend                         │
+│              流式输出 + 打字机效果 + 交互式界面               │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                    Backend (FastAPI)                         │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐    │
-│  │ 用户服务  │  │ 任务调度  │  │ 内容分析  │  │ 报告生成  │    │
-│  └──────────┘  └──────────┘  └──────────┘  └──────────┘    │
+│                    AletheiaSystem 核心调度                    │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
+│  │ Direction   │  │  Angle      │  │  Judgment           │  │
+│  │ Agent       │─►│  Agents     │─►│  Agent              │  │
+│  │ (方向判定)  │  │  (15个角度) │  │  (综合研判)         │  │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                  Agent Orchestrator                          │
-│              (Pipeline: Parser → Search → Verdict)           │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│  ┌─────────────────┐    ┌─────────────────┐    ┌──────────┐ │
-│  │  解析预处理Agent  │───→│    搜索Agent     │───→│ 鉴定结论Agent│ │
-│  │ (Parser Agent)  │    │ (Search Agent)  │    │(Verdict) │ │
-│  │ 提取核心信息+标准化 │    │ 全网检索+信源评估  │    │交叉验证+出结论│ │
-│  └─────────────────┘    └─────────────────┘    └──────────┘ │
+│                      LLM 接口层                              │
+│              OpenAI API / DashScope API                      │
+│                     DeepSeek 模型                            │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ### Agent 协作流程
 
-1. **Parser Agent** - 解析用户输入，提取关键主张，生成标准化检索指令
-2. **Search Agent** - 执行全网检索，获取权威信源和证据数据
-3. **Verdict Agent** - 基于证据进行逻辑分析和交叉验证，生成鉴定结论
+1. **Direction Agent（方向判定 Agent）** - 分析内容特征，识别事件类型，动态激活 1-3 个最相关的角度 Agent
+2. **Angle Agents（角度 Agent 集群）** - 15 个专业角度 Agent 并行分析，每个专注特定维度
+3. **Judgment Agent（综合研判 Agent）** - 整合多角度报告，进行最终真实性判定
 
 ---
 
@@ -70,9 +65,8 @@
 
 ### 环境要求
 
-- **Node.js** >= 18.0.0
 - **Python** >= 3.11
-- **npm** 或 **yarn**
+- **OpenAI API Key** 或 **DashScope API Key**
 
 ### 1. 克隆项目
 
@@ -84,51 +78,33 @@ cd Aletheia
 ### 2. 配置环境变量
 
 ```bash
-# 后端配置
-cd backend
+# 复制环境变量示例文件
 cp .env.example .env
 
 # 编辑 .env 文件，填入你的 API 密钥
-# OPENAI_API_KEY=your_openai_api_key
-# SERPAPI_KEY=your_serpapi_key
-# NEWSAPI_KEY=your_newsapi_key
+# OPENAI_API_KEY=your_api_key
+# OPENAI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+# OPENAI_MODEL=deepseek-v3.2
 ```
 
-### 3. 安装依赖并启动后端
+### 3. 安装依赖
 
 ```bash
-cd backend
-
 # 创建虚拟环境（推荐）
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 
 # 安装依赖
 pip install -r requirements.txt
-
-# 启动服务
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-后端服务将在 http://localhost:8000 启动
-
-### 4. 安装依赖并启动前端
+### 4. 启动应用
 
 ```bash
-cd frontend
-
-# 安装依赖
-npm install
-
-# 启动开发服务器
-npm run dev
+python app.py
 ```
 
-前端服务将在 http://localhost:3000 启动
-
-### 5. 访问应用
-
-打开浏览器访问 http://localhost:3000 即可使用 Aletheia 舆情谎言鉴定系统。
+应用将在 http://localhost:7861 启动
 
 ---
 
@@ -136,72 +112,60 @@ npm run dev
 
 ```
 aletheia/
-├── frontend/                   # Next.js 前端
-│   ├── src/
-│   │   ├── app/               # App Router 页面
-│   │   ├── components/        # React 组件
-│   │   │   ├── InputBox.tsx       # 输入框组件
-│   │   │   ├── VerifyButton.tsx   # 鉴定按钮
-│   │   │   ├── ResultCard.tsx     # 结果卡片
-│   │   │   ├── EvidenceList.tsx   # 证据列表
-│   │   │   ├── ReasoningPanel.tsx # 推理面板
-│   │   │   └── ConfidenceRing.tsx # 可信度环形图
-│   │   ├── lib/               # 工具函数和 API 调用
-│   │   └── types/             # TypeScript 类型定义
-│   ├── package.json
-│   └── next.config.ts
-│
-├── backend/                    # FastAPI 后端
-│   ├── app/
-│   │   ├── agents/            # Agent 系统
-│   │   │   ├── parser.py      # 解析预处理 Agent
-│   │   │   ├── search.py      # 搜索 Agent
-│   │   │   └── verdict.py     # 鉴定结论 Agent
-│   │   ├── api/               # API 路由
-│   │   ├── core/              # 核心配置
-│   │   ├── db/                # 数据库模型
-│   │   └── models/            # Pydantic 模型
-│   ├── main.py                # 应用入口
-│   ├── requirements.txt       # Python 依赖
-│   └── .env.example           # 环境变量示例
-│
-├── ARCHITECTURE.md             # 架构设计文档
-├── FRONTEND.md                 # 前端设计文档
-└── README.md                   # 项目说明文档
+├── aletheia/                      # 核心代码
+│   ├── agents/                    # Agent 模块
+│   │   ├── angles/                # 15个角度 Agent
+│   │   │   ├── core_fact_checker.py      # 核心事实核查
+│   │   │   ├── timeline_builder.py       # 时间线构建
+│   │   │   ├── stakeholder_mapper.py     # 利益相关方分析
+│   │   │   ├── sentiment_analyzer.py     # 舆论情绪分析
+│   │   │   ├── data_verifier.py          # 数据验证
+│   │   │   ├── source_credibility.py     # 信源可信度
+│   │   │   ├── context_analyzer.py       # 背景语境分析
+│   │   │   ├── technical_analyzer.py     # 技术细节分析
+│   │   │   ├── legal_analyzer.py         # 法律合规分析
+│   │   │   ├── psychological_analyzer.py # 心理动机分析
+│   │   │   ├── economic_analyzer.py      # 经济影响分析
+│   │   │   ├── media_coverage.py         # 媒体报道分析
+│   │   │   ├── social_impact.py          # 社会影响分析
+│   │   │   ├── causality_analyzer.py     # 因果逻辑分析
+│   │   │   └── comparison_analyzer.py    # 对比参照分析
+│   │   ├── base.py                # Agent 基类
+│   │   ├── direction.py           # 方向判定 Agent
+│   │   └── judgment.py            # 综合研判 Agent
+│   ├── core/                      # 核心配置
+│   │   └── config.py              # 配置管理
+│   ├── utils/                     # 工具函数
+│   │   └── helpers.py
+│   └── system.py                  # 系统调度器
+├── app.py                         # Gradio 前端
+├── .env                           # 环境变量
+├── .env.example                   # 环境变量示例
+├── requirements.txt               # Python 依赖
+├── PROJECT_DOCUMENTATION.md       # 项目技术文档
+└── README.md                      # 项目说明文档
 ```
 
 ---
 
 ## 🛠️ 技术栈
 
-### 前端
+### 后端 & AI
 
 | 技术 | 版本 | 用途 |
 |------|------|------|
-| Next.js | 16.1.6 | React 框架 |
-| TypeScript | 5.0+ | 类型安全 |
-| Tailwind CSS | 4.0 | 样式框架 |
-| shadcn/ui | - | UI 组件库 |
-| Lucide React | - | 图标库 |
-
-### 后端
-
-| 技术 | 版本 | 用途 |
-|------|------|------|
-| FastAPI | 0.115.0 | Web 框架 |
 | Python | 3.11+ | 编程语言 |
-| Pydantic | 2.9.2 | 数据验证 |
-| SQLAlchemy | 2.0.36 | ORM 框架 |
-| Uvicorn | 0.32.0 | ASGI 服务器 |
+| Gradio | 5.0+ | Web 界面框架 |
+| OpenAI | 1.0+ | LLM API 客户端 |
+| Pydantic | 2.0+ | 数据验证 |
+| AsyncIO | - | 异步编程 |
 
-### AI & 搜索
+### AI 模型
 
-| 技术 | 用途 |
+| 模型 | 用途 |
 |------|------|
-| OpenAI API | LLM 推理 |
-| Anthropic Claude | 备选 LLM |
-| SerpAPI | 搜索引擎接口 |
-| NewsAPI | 新闻数据接口 |
+| DeepSeek-V3 | 主要推理模型 |
+| GPT-4 | 备选模型 |
 
 ---
 
@@ -209,21 +173,40 @@ aletheia/
 
 ### 核心功能
 
-- 🔍 **智能解析** - 自动提取舆情中的关键主张和实体
-- 🌐 **全网搜索** - 多源并行检索权威信源
-- 🧠 **AI 鉴定** - 基于证据的逻辑分析和交叉验证
-- 📈 **可信度评分** - 量化的可信度评估
+- 🎯 **智能方向判定** - 基于内容特征自动识别事件类型，动态激活相关角度
+- 🔍 **多角度调查** - 15个专业角度并行分析，覆盖事实、时间线、利益相关方等维度
+- 🧠 **AI 综合研判** - 基于多角度报告进行逻辑分析和交叉验证
+- 📈 **可信度评分** - 量化的可信度评估（0-100%）
 - 📋 **证据溯源** - 完整的证据链和来源链接
-- 💡 **推理展示** - 透明的 AI 推理过程
+- 💡 **推理展示** - 透明的 AI 推理过程（打字机效果实时显示）
+
+### 15个分析角度
+
+| 角度 | 功能 |
+|------|------|
+| 核心事实核查 | 验证具体主张和数据的真实性 |
+| 时间线构建 | 还原事件的时间脉络 |
+| 利益相关方分析 | 识别各方立场和动机 |
+| 舆论情绪分析 | 分析公众情绪倾向 |
+| 数据验证 | 验证数字和统计的准确性 |
+| 信源可信度 | 评估信息来源的可靠性 |
+| 背景语境分析 | 分析事件的历史和社会背景 |
+| 技术细节分析 | 验证技术相关内容 |
+| 法律合规分析 | 分析法律合规性 |
+| 心理动机分析 | 分析行为背后的心理因素 |
+| 经济影响分析 | 评估经济影响 |
+| 媒体报道分析 | 分析媒体报道的偏差 |
+| 社会影响分析 | 评估社会影响力 |
+| 因果逻辑分析 | 验证因果关系 |
+| 对比参照分析 | 与类似事件对比 |
 
 ### 支持的鉴定结论
 
-| 结论 | 图标 | 说明 |
-|------|------|------|
-| 真实 | ✅ | 内容经多个权威信源证实 |
-| 虚假 | ❌ | 内容已被权威信源证伪 |
-| 存疑 | ⚠️ | 证据不足，存在争议 |
-| 无法核实 | ❓ | 缺乏可验证的信息来源 |
+| 结论 | 说明 |
+|------|------|
+| 真实/属实 | 内容经多个权威信源证实 |
+| 虚假/不实 | 内容已被权威信源证伪 |
+| 无法核实/存疑 | 证据不足，存在争议 |
 
 ---
 
@@ -232,75 +215,17 @@ aletheia/
 ### 必需的环境变量
 
 ```env
-# LLM 配置（至少配置一个）
-OPENAI_API_KEY=your_openai_api_key
-OPENAI_MODEL=gpt-4
-
-# 或 Claude
-ANTHROPIC_API_KEY=your_anthropic_api_key
-ANTHROPIC_MODEL=claude-3-5-sonnet-20241022
-
-# 搜索配置（至少配置一个）
-SERPAPI_KEY=your_serpapi_key
-NEWSAPI_KEY=your_newsapi_key
+# LLM 配置
+OPENAI_API_KEY=your_api_key
+OPENAI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+OPENAI_MODEL=deepseek-v3.2
 ```
 
 ### 可选的环境变量
 
 ```env
 # 应用配置
-APP_NAME=Aletheia
-APP_VERSION=1.0.0
 DEBUG=True
-
-# 数据库
-DATABASE_URL=sqlite:///./aletheia.db
-
-# CORS
-CORS_ORIGINS=["http://localhost:3000"]
-```
-
----
-
-## 📝 API 文档
-
-启动后端服务后，访问 http://localhost:8000/docs 查看完整的 API 文档（Swagger UI）。
-
-### 主要接口
-
-```http
-POST /api/verify
-Content-Type: application/json
-
-{
-  "content": "要鉴定的舆情内容"
-}
-```
-
-### 响应示例
-
-```json
-{
-  "verdict_id": "uuid",
-  "conclusion": "false",
-  "confidence_score": 0.92,
-  "summary": "该说法已被多个权威信源证伪",
-  "evidence_list": [
-    {
-      "source": "新华社",
-      "title": "官方通报：某某事件调查结果",
-      "url": "https://...",
-      "publish_time": "2024-01-15",
-      "relevance_score": 0.95
-    }
-  ],
-  "reasoning_chain": [
-    "提取核心主张",
-    "检索权威信源",
-    "交叉验证",
-    "得出结论"
-  ]
-}
 ```
 
 ---
@@ -325,10 +250,9 @@ Content-Type: application/json
 
 ## 🙏 致谢
 
-- [OpenAI](https://openai.com/) - 提供强大的 LLM 能力
-- [SerpAPI](https://serpapi.com/) - 提供搜索引擎接口
-- [NewsAPI](https://newsapi.org/) - 提供新闻数据接口
-- [shadcn/ui](https://ui.shadcn.com/) - 提供精美的 UI 组件
+- [DeepSeek](https://deepseek.com/) - 提供强大的 LLM 能力
+- [DashScope](https://dashscope.aliyun.com/) - 提供 API 服务
+- [Gradio](https://gradio.app/) - 提供 Web 界面框架
 
 ---
 
