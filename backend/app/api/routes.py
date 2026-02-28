@@ -3,10 +3,11 @@ from fastapi.responses import StreamingResponse
 import json
 import asyncio
 
-from app.models.schemas import VerifyRequest, VerifyResponse, LoadingStep
+from app.models.schemas import VerifyRequest, VerifyResponse, LoadingStep, ArticleRequest, ArticleResponse
 from app.agents.parser import ParserAgent
 from app.agents.search import SearchAgent
 from app.agents.verdict import VerdictAgent
+from app.agents.article import ArticleAgent
 
 router = APIRouter()
 
@@ -14,6 +15,7 @@ router = APIRouter()
 parser_agent = ParserAgent()
 search_agent = SearchAgent()
 verdict_agent = VerdictAgent()
+article_agent = ArticleAgent()
 
 
 @router.post("/verify", response_model=VerifyResponse)
@@ -237,6 +239,37 @@ async def verify_content_stream(request: VerifyRequest):
             "X-Accel-Buffering": "no"
         }
     )
+
+
+@router.post("/generate-article", response_model=ArticleResponse)
+async def generate_article(request: ArticleRequest):
+    """
+    基于鉴定结果生成新闻稿
+    
+    流程：
+    1. 接收鉴定结果和原始内容
+    2. Article Agent 分析材料并生成新闻稿
+    3. 返回新闻稿内容
+    """
+    try:
+        print(f"[ArticleAPI] Generating article for verdict: {request.verify_result.get('conclusion')}")
+        
+        # 调用 Article Agent 生成新闻稿
+        result = await article_agent.generate_article(
+            verify_result=request.verify_result,
+            original_content=request.original_content
+        )
+        
+        return ArticleResponse(
+            article_id=result['article_id'],
+            verdict_ref=result['verdict_ref'],
+            article=result['article'],
+            metadata=result['metadata']
+        )
+        
+    except Exception as e:
+        print(f"[ArticleAPI] Error generating article: {e}")
+        raise HTTPException(status_code=500, detail=f"新闻稿生成失败: {str(e)}")
 
 
 @router.get("/health")

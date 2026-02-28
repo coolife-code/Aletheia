@@ -120,3 +120,17 @@ class VerifyResponse(BaseModel):
 class LoadingStep(BaseModel):
     step: Literal["parsing", "searching", "verifying"]
     message: str
+
+
+class ArticleRequest(BaseModel):
+    """新闻稿生成请求"""
+    verify_result: Dict[str, Any] = Field(..., description="鉴定结果")
+    original_content: str = Field(..., description="原始内容")
+
+
+class ArticleResponse(BaseModel):
+    """新闻稿生成响应"""
+    article_id: str
+    verdict_ref: str
+    article: Dict[str, str]
+    metadata: Dict[str, Any]

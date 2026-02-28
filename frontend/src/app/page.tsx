@@ -6,8 +6,8 @@ import { VerifyButton } from '../components/VerifyButton';
 import { ResultCard } from '../components/ResultCard';
 import { EvidenceList } from '../components/EvidenceList';
 import ReasoningPanel from '../components/ReasoningPanel';
-import { verifyContentStream } from '../lib/api';
-import { VerifyResponse, StreamEvent, LoadingStepType } from '../types';
+import { verifyContentStream, generateArticle } from '../lib/api';
+import { VerifyResponse, StreamEvent, LoadingStepType, ArticleResponse } from '../types';
 import { AlertCircle } from 'lucide-react';
 
 export default function Home() {
@@ -17,6 +17,8 @@ export default function Home() {
   const [result, setResult] = useState<VerifyResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [streamEvents, setStreamEvents] = useState<StreamEvent[]>([]);
+  const [articleData, setArticleData] = useState<ArticleResponse | null>(null);
+  const [isGeneratingArticle, setIsGeneratingArticle] = useState(false);
 
   const handleVerify = async () => {
     if (!inputContent.trim()) return;
@@ -63,6 +65,24 @@ export default function Home() {
     setError(null);
     setStreamEvents([]);
     setLoadingStep('parsing');
+    setArticleData(null);
+  };
+
+  const handleGenerateArticle = async () => {
+    if (!result || !inputContent) return;
+
+    setIsGeneratingArticle(true);
+    try {
+      const article = await generateArticle({
+        verify_result: result,
+        original_content: inputContent
+      });
+      setArticleData(article);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '新闻稿生成失败');
+    } finally {
+      setIsGeneratingArticle(false);
+    }
   };
 
   return (
@@ -163,6 +183,11 @@ export default function Home() {
               dimensionalAnalysis={result.dimensional_analysis}
               multiAngleReasoning={result.multi_angle_reasoning}
               findings={result.findings}
+              onGenerateArticle={handleGenerateArticle}
+              articleData={articleData}
+              isGeneratingArticle={isGeneratingArticle}
+              verifyResult={result}
+              originalContent={inputContent}
             />
 
             {/* 证据列表 - 包含 Search Agent 分析洞察 */}

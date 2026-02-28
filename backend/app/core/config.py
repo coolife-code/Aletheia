@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     VERDICT_LLM_MODEL: Optional[str] = None
     VERDICT_LLM_TEMPERATURE: float = 0.1
     
+    # Article Agent 专用配置
+    ARTICLE_LLM_MODEL: Optional[str] = None
+    ARTICLE_LLM_TEMPERATURE: float = 0.7
+    
     # 搜索配置
     SEARCH_PROVIDER: str = "serpapi"  # serpapi | google | bing
     SERPAPI_KEY: Optional[str] = None

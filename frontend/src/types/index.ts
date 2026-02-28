@@ -247,3 +247,28 @@ export const AGENT_CONFIG: Record<string, {
     description: '多维度鉴定专家 - 多角度分析、综合判断'
   }
 };
+
+// 新闻稿相关类型
+export interface ArticleRequest {
+  verify_result: VerifyResponse;
+  original_content: string;
+}
+
+export interface ArticleResponse {
+  article_id: string;
+  verdict_ref: string;
+  article: {
+    headline: string;
+    lead: string;
+    body: string;
+    conclusion: string;
+    sources: string;
+  };
+  metadata: {
+    conclusion: ConclusionType;
+    confidence_score: number;
+    evidence_count: number;
+    key_sources_count: number;
+    generated_at: string;
+  };
+}

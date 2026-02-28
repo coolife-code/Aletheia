@@ -4,8 +4,10 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { ConfidenceRing } from './ConfidenceRing';
 import { ConclusionType, CONCLUSION_CONFIG, MultiDimensionalAnalysis, MultiAngleReasoning, Findings } from '../types';
-import { ChevronDown, ChevronUp, Layers, Lightbulb, CheckCircle, XCircle, HelpCircle, AlertCircle, Download, FileJson, FileText, File } from 'lucide-react';
+import { ChevronDown, ChevronUp, Layers, Lightbulb, CheckCircle, XCircle, HelpCircle, AlertCircle, Download, FileJson, FileText, File, PenTool } from 'lucide-react';
 import { Button } from './ui/button';
+import { ArticlePanel } from './ArticlePanel';
+import { VerifyResponse, ArticleResponse } from '../types';
 
 interface ResultCardProps {
   conclusion: ConclusionType;
@@ -14,6 +16,11 @@ interface ResultCardProps {
   dimensionalAnalysis?: MultiDimensionalAnalysis;
   multiAngleReasoning?: MultiAngleReasoning;
   findings?: Findings;
+  onGenerateArticle?: () => void;
+  articleData?: ArticleResponse | null;
+  isGeneratingArticle?: boolean;
+  verifyResult?: VerifyResponse;
+  originalContent?: string;
 }
 
 export function ResultCard({
@@ -22,13 +29,19 @@ export function ResultCard({
   summary,
   dimensionalAnalysis,
   multiAngleReasoning,
-  findings
+  findings,
+  onGenerateArticle,
+  articleData,
+  isGeneratingArticle = false,
+  verifyResult,
+  originalContent
 }: ResultCardProps) {
   const config = CONCLUSION_CONFIG[conclusion];
   const [showDimensions, setShowDimensions] = useState(true);
   const [showAngles, setShowAngles] = useState(false);
   const [showFindings, setShowFindings] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showArticle, setShowArticle] = useState(false);
 
   const exportToJSON = () => {
     const data = {
@@ -346,6 +359,17 @@ export function ResultCard({
 
   return (
     <div className="space-y-4">
+      {/* 新闻稿面板 */}
+      {(showArticle || isGeneratingArticle) && (
+        <ArticlePanel
+          article={articleData}
+          isLoading={isGeneratingArticle}
+          onClose={() => setShowArticle(false)}
+          onCopy={() => {}}
+          onDownload={() => {}}
+        />
+      )}
+
       {/* 主要结论卡片 */}
       <Card className="border-0 shadow-sm">
         <CardHeader className="pb-2">
@@ -353,41 +377,58 @@ export function ResultCard({
             <CardTitle className="text-lg font-semibold text-gray-800">
               鉴定结论
             </CardTitle>
-            <div className="relative">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowExportMenu(!showExportMenu)}
-                className="h-8 px-3 gap-2"
-              >
-                <Download className="w-4 h-4" />
-                <span className="text-sm">导出报告</span>
-              </Button>
-              {showExportMenu && (
-                <div className="absolute right-0 top-full mt-2 z-10 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[180px]">
-                  <button
-                    onClick={exportToJSON}
-                    className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2 whitespace-nowrap"
-                  >
-                    <FileJson className="w-4 h-4 text-blue-600 flex-shrink-0" />
-                    <span>导出 JSON</span>
-                  </button>
-                  <button
-                    onClick={exportToMarkdown}
-                    className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2 whitespace-nowrap"
-                  >
-                    <FileText className="w-4 h-4 text-green-600 flex-shrink-0" />
-                    <span>导出 Markdown</span>
-                  </button>
-                  <button
-                    onClick={exportToTXT}
-                    className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2 whitespace-nowrap"
-                  >
-                    <File className="w-4 h-4 text-gray-600 flex-shrink-0" />
-                    <span>导出 TXT</span>
-                  </button>
-                </div>
+            <div className="flex items-center gap-2">
+              {onGenerateArticle && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setShowArticle(true);
+                    onGenerateArticle();
+                  }}
+                  disabled={isGeneratingArticle}
+                  className="h-8 px-3 gap-2"
+                >
+                  <PenTool className="w-4 h-4" />
+                  <span className="text-sm">写稿</span>
+                </Button>
               )}
+              <div className="relative">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowExportMenu(!showExportMenu)}
+                  className="h-8 px-3 gap-2"
+                >
+                  <Download className="w-4 h-4" />
+                  <span className="text-sm">导出报告</span>
+                </Button>
+                {showExportMenu && (
+                  <div className="absolute right-0 top-full mt-2 z-10 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[180px]">
+                    <button
+                      onClick={exportToJSON}
+                      className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2 whitespace-nowrap"
+                    >
+                      <FileJson className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                      <span>导出 JSON</span>
+                    </button>
+                    <button
+                      onClick={exportToMarkdown}
+                      className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2 whitespace-nowrap"
+                    >
+                      <FileText className="w-4 h-4 text-green-600 flex-shrink-0" />
+                      <span>导出 Markdown</span>
+                    </button>
+                    <button
+                      onClick={exportToTXT}
+                      className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2 whitespace-nowrap"
+                    >
+                      <File className="w-4 h-4 text-gray-600 flex-shrink-0" />
+                      <span>导出 TXT</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </CardHeader>
